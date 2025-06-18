@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoProcessingPlatform.Wor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoProcessingPlatform.Core", "VideoProcessingPlatform.Core\VideoProcessingPlatform.Core.csproj", "{4A8CA296-AB7B-4F1A-A389-12028EC69D9F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoProcessingPlatform.Infrastructure", "VideoProcessingPlatform.Infrastructure\VideoProcessingPlatform.Infrastructure.csproj", "{528555B8-588D-457B-94B2-7CFFC1488D7E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{4A8CA296-AB7B-4F1A-A389-12028EC69D9F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4A8CA296-AB7B-4F1A-A389-12028EC69D9F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4A8CA296-AB7B-4F1A-A389-12028EC69D9F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{528555B8-588D-457B-94B2-7CFFC1488D7E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{528555B8-588D-457B-94B2-7CFFC1488D7E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{528555B8-588D-457B-94B2-7CFFC1488D7E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{528555B8-588D-457B-94B2-7CFFC1488D7E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
