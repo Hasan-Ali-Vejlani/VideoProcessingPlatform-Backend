@@ -30,9 +30,7 @@ namespace VideoProcessingPlatform.Infrastructure.Data
 
             // Seed an Admin user for initial setup
             // IMPORTANT: For production, you would retrieve sensitive data like passwords from secure configuration (e.g., Azure Key Vault).
-            // For demo purposes, we'll hash a simple default password here.
-            string adminPassword = "AdminPassword123!"; // Choose a strong default password
-            string adminPasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword); // Hash it using BCrypt
+            string staticadminPasswordHash = "$2a$11$KUTK0Grj2NACm8nQRSuMQeMRXy9HN9M0Ab3bVj0.XDtgfVkGJEm/m";
 
             modelBuilder.Entity<User>().HasData(
                 new User
@@ -40,9 +38,9 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                     Id = Guid.Parse("C5761B01-7E04-4F58-8C64-46CE9EC3B24F"), // A fixed GUID for predictable seeding
                     Username = "admin",
                     Email = "admin@example.com",
-                    PasswordHash = adminPasswordHash,
+                    PasswordHash = staticadminPasswordHash,
                     Role = "Admin", // Assign 'Admin' role
-                    CreatedAt = DateTime.UtcNow // Set creation timestamp
+                    CreatedAt = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc) // Set creation timestamp
                 }
             );
 

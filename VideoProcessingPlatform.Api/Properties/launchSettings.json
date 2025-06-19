@@ -4,38 +4,50 @@
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
     "iisExpress": {
-      "applicationUrl": "http://localhost:40032",
-      "sslPort": 44356
+      "applicationUrl": "http://localhost:40032" // Keep this HTTP. This is what IIS Express uses.
+      // "sslPort": 44356 // <-- REMOVED: No more SSL for IIS Express
     }
   },
   "profiles": {
-    "http": {
+    "http": { // This is your primary Kestrel HTTP profile
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "launchUrl": "swagger",
-      "applicationUrl": "http://localhost:5043",
+      "applicationUrl": "http://localhost:5000", // <-- CHANGED: Standardized to port 5000 for HTTP
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     },
-    "https": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "launchUrl": "swagger",
-      "applicationUrl": "https://localhost:7007;http://localhost:5043",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    },
-    "IIS Express": {
+    // "https": { // <-- REMOVED: No need for an explicit HTTPS profile
+    //   "commandName": "Project",
+    //   "dotnetRunMessages": true,
+    //   "launchBrowser": true,
+    //   "launchUrl": "swagger",
+    //   "applicationUrl": "https://localhost:7007;http://localhost:5043",
+    //   "environmentVariables": {
+    //     "ASPNETCORE_ENVIRONMENT": "Development"
+    //   }
+    // },
+    "IIS Express": { // This profile now inherits HTTP-only from iisSettings
       "commandName": "IISExpress",
       "launchBrowser": true,
       "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
+      // applicationUrl and sslPort are now controlled by iisSettings.iisExpress
+    },
+    "VideoProcessingPlatform.Api": { // Your direct project Kestrel profile
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "applicationUrl": "http://localhost:5000", // <-- CHANGED: Standardized to port 5000 for HTTP
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "hotReloadProfile": "aspnetcore"
     }
   }
 }

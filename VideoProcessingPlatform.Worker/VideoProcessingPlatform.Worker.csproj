@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VideoProcessingPlatform.Core\VideoProcessingPlatform.Core.csproj" />
+    <ProjectReference Include="..\VideoProcessingPlatform.Infrastructure\VideoProcessingPlatform.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
