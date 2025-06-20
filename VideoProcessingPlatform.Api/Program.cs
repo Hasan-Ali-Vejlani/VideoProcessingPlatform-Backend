@@ -1,6 +1,6 @@
 // VideoProcessingPlatform.Api/Program.cs
 
-// --- Required Using Statements ---
+// --- Required Using Statements ---\
 using Microsoft.EntityFrameworkCore; // For DbContext and SQL Server configuration
 using VideoProcessingPlatform.Infrastructure.Data; // Your DbContext (requires reference to Infrastructure)
 using VideoProcessingPlatform.Core.Interfaces; // All your interfaces (from Core project)
@@ -12,10 +12,11 @@ using Microsoft.IdentityModel.Tokens; // For JWT token validation parameters
 using System.Text; // For Encoding
 using Microsoft.OpenApi.Models; // For Swagger UI security definitions
 using System; // For InvalidOperationException
+using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// --- Configure Services ---
+// --- Configure Services ---\
 
 // 1. Add Controllers
 builder.Services.AddControllers();
@@ -24,73 +25,82 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
     // Option A: Use SQL Server LocalDB (most common for dev, typically installed with VS)
-    // "Server=(localdb)\\MSSQLLocalDB;Database=VppDb;Trusted_Connection=True;MultipleActiveResultSets=true"
-    //
-    // Option B: Use a full SQL Server instance installed on your PC
-    // Replace 'YOUR_PC_NAME\SQLEXPRESS' with the actual server name/instance
-    // You can find your SQL Server instance name by opening SQL Server Management Studio (SSMS)
-    // and looking at the server name when you connect, or in SQL Server Configuration Manager.
-    // Example: "Server=localhost\\SQLEXPRESS;Database=VppDb;Trusted_Connection=True;MultipleActiveResultSets=true"
-    // Or if it's a default instance on localhost: "Server=.;Database=VppDb;Trusted_Connection=True;MultipleActiveResultSets=true"
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), sqlOptions => sqlOptions.MigrationsAssembly("VideoProcessingPlatform.Api"));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlServerOptionsAction: sqlOptions =>
+        {
+            sqlOptions.MigrationsAssembly(Assembly.GetExecutingAssembly().GetName().Name);
+        });
+    // Option B: Use an in-memory database for testing (good for quick local tests, but data is not persistent)
+    // options.UseInMemoryDatabase("VppDbInMemory");
 });
 
-// 3. Register Services and Repositories for Dependency Injection
-// Using AddScoped ensures one instance per HTTP request, suitable for DbContext and most services.
+// 3. Register your services and repositories for Dependency Injection
+// Authentication/Authorization related services
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IJWTService, JWTService>();
-builder.Services.AddScoped<IAuthService, AuthService>(); // Note: AuthService lives in Api project, not Infrastructure
+builder.Services.AddScoped<IAuthService, AuthService>(); // Your AuthService in Api project
 
-// 4. Configure CORS (Cross-Origin Resource Sharing)
-// This is crucial to allow your Angular frontend (running on a different port/origin) to make requests to your API.
+// --- New Upload Related Services and Repositories ---
+builder.Services.AddScoped<IUploadMetadataRepository, UploadMetadataRepository>();
+builder.Services.AddSingleton<IFileStorageService, AzureBlobStorageService>(); // Singleton as BlobServiceClient can be reused
+builder.Services.AddScoped<IUploadService, UploadService>();
+// --- End New Upload Related Services ---
+
+
+// 4. Configure JWT Authentication
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    // Example policy: require Admin role for specific actions
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    // Example policy: require any authenticated user
+    options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
+});
+
+// 5. Configure CORS (Cross-Origin Resource Sharing)
+// This is crucial for allowing your Angular frontend to communicate with your .NET backend.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularApp",
-        policy => policy.WithOrigins("http://localhost:4200") // Explicitly allow your Angular dev server URL
-                        .AllowAnyHeader() // Allows all common HTTP headers (e.g., Content-Type, Authorization)
-                        .AllowAnyMethod() // Allows all HTTP methods (GET, POST, PUT, DELETE, etc.)
-                        .AllowCredentials()); // Allows sending cookies, authorization headers, etc.
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:4200") // Allow your Angular app's URL
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials(); // Allow credentials (cookies, authorization headers)
+        });
 });
 
-// 5. Add JWT Authentication Scheme Configuration
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme; // Default scheme for authentication
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;   // Default scheme for challenge (e.g., 401 Unauthorized)
-})
-.AddJwtBearer(options =>
-{
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,           // Validate the server that created the token
-        ValidateAudience = true,         // Validate the recipient of the token is authorized
-        ValidateLifetime = true,         // Validate the token's expiration date
-        ValidateIssuerSigningKey = true, // Validate the token's signature key (ensures token hasn't been tampered with)
-
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],     // Set valid issuer from appsettings.json
-        ValidAudience = builder.Configuration["Jwt:Audience"], // Set valid audience from appsettings.json
-        // Get the signing key from appsettings.json and encode it
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]
-            ?? throw new InvalidOperationException("JWT:Key not found in configuration. Please add a strong, random key to appsettings.json.")))
-    };
-});
-
-// 6. Add Authorization Services
-builder.Services.AddAuthorization(); // This enables the use of [Authorize] attributes on controllers/actions.
-
-// 7. Configure Swagger/OpenAPI for API Documentation and Testing (with JWT support)
-builder.Services.AddEndpointsApiExplorer(); // Required for Minimal APIs, good practice to include
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Video Processing Platform API", Version = "v1" });
-    // Configure Swagger to use JWT Bearer authentication in the UI
+
+    // Configure Swagger to use JWT Bearer authentication
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
         Name = "Authorization",
-        In = ParameterLocation.Header,
         Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer" // The name of the authentication scheme for Swagger
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\""
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
@@ -108,7 +118,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// --- Configure the HTTP Request Pipeline ---
+// --- Configure the HTTP Request Pipeline ---\
 var app = builder.Build();
 
 // Configure the HTTP request pipeline for development environment (Swagger UI)

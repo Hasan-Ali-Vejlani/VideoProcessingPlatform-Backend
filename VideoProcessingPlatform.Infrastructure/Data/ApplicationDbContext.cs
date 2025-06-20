@@ -15,7 +15,8 @@ namespace VideoProcessingPlatform.Infrastructure.Data
 
         // Define your DbSet properties for each entity that maps to a database table
         public DbSet<User> Users { get; set; }
-        // We will add other DbSets (UploadMetadata, EncodingProfile, etc.) as we implement those features.
+        public DbSet<UploadMetadata> UploadMetadata { get; set; } // Add DbSet for UploadMetadata
+        // We will add other DbSets (EncodingProfile, etc.) as we implement those features.
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -26,6 +27,28 @@ namespace VideoProcessingPlatform.Infrastructure.Data
             {
                 entity.HasIndex(u => u.Username).IsUnique();
                 entity.HasIndex(u => u.Email).IsUnique();
+            });
+
+            // Configure UploadMetadata entity
+            modelBuilder.Entity<UploadMetadata>(entity =>
+            {
+                entity.HasKey(um => um.Id); // Primary Key
+                entity.Property(um => um.OriginalFileName).IsRequired().HasMaxLength(255);
+                entity.Property(um => um.OriginalFileSize).IsRequired();
+                entity.Property(um => um.MimeType).IsRequired().HasMaxLength(50);
+                entity.Property(um => um.TotalChunks).IsRequired();
+                entity.Property(um => um.CompletedChunks)
+                      .IsRequired()
+                      .HasColumnType("NVARCHAR(MAX)"); // Store as text, up to maximum length
+                entity.Property(um => um.OriginalStoragePath).HasMaxLength(512); // Nullable
+                entity.Property(um => um.UploadStatus).IsRequired().HasMaxLength(50);
+                entity.Property(um => um.UploadedAt).IsRequired();
+
+                // Relationship: User has many UploadMetadata (User ||--o{ UploadMetadata)
+                entity.HasOne(um => um.User)
+                      .WithMany() // Assuming User doesn't explicitly need a collection of UploadMetadata
+                      .HasForeignKey(um => um.UserId)
+                      .OnDelete(DeleteBehavior.Restrict); // Or .Cascade, depending on desired behavior (Restrict is safer)
             });
 
             // Seed an Admin user for initial setup
@@ -40,11 +63,9 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                     Email = "admin@example.com",
                     PasswordHash = staticadminPasswordHash,
                     Role = "Admin", // Assign 'Admin' role
-                    CreatedAt = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc) // Set creation timestamp
+                    CreatedAt = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc) // Set creation timestamp for consistency
                 }
             );
-
-            // Other entity configurations will go here as we add them
         }
     }
 }
