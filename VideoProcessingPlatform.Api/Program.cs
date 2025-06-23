@@ -12,7 +12,7 @@ using Microsoft.IdentityModel.Tokens; // For JWT token validation parameters
 using System.Text; // For Encoding
 using Microsoft.OpenApi.Models; // For Swagger UI security definitions
 using System; // For InvalidOperationException
-using System.Reflection;
+using System.Reflection; // Required for Assembly.GetExecutingAssembly().GetName().Name
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,11 +40,16 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IJWTService, JWTService>();
 builder.Services.AddScoped<IAuthService, AuthService>(); // Your AuthService in Api project
 
-// --- New Upload Related Services and Repositories ---
+// --- Upload Related Services and Repositories ---
 builder.Services.AddScoped<IUploadMetadataRepository, UploadMetadataRepository>();
-builder.Services.AddSingleton<IFileStorageService, AzureBlobStorageService>(); // Singleton as BlobServiceClient can be reused
+builder.Services.AddSingleton<IFileStorageService, AzureBlobStorageService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
-// --- End New Upload Related Services ---
+
+// --- New: Encoding Profile Related Services and Repositories ---
+builder.Services.AddScoped<IEncodingProfileRepository, EncodingProfileRepository>();
+builder.Services.AddScoped<IFFmpegCommandBuilder, FFmpegCommandBuilder>();
+builder.Services.AddScoped<IEncodingProfileService, EncodingProfileService>();
+// --- End New Encoding Profile Related Services ---
 
 
 // 4. Configure JWT Authentication
@@ -73,7 +78,6 @@ builder.Services.AddAuthorization(options =>
 });
 
 // 5. Configure CORS (Cross-Origin Resource Sharing)
-// This is crucial for allowing your Angular frontend to communicate with your .NET backend.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularApp",
@@ -82,7 +86,7 @@ builder.Services.AddCors(options =>
             policy.WithOrigins("http://localhost:4200") // Allow your Angular app's URL
                   .AllowAnyHeader()
                   .AllowAnyMethod()
-                  .AllowCredentials(); // Allow credentials (cookies, authorization headers)
+                  .AllowCredentials();
         });
 });
 
@@ -92,7 +96,6 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Video Processing Platform API", Version = "v1" });
 
-    // Configure Swagger to use JWT Bearer authentication
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -113,7 +116,7 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            Array.Empty<string>() // Empty array means no specific roles are required for this security scheme
+            Array.Empty<string>()
         }
     });
 });
@@ -121,7 +124,6 @@ builder.Services.AddSwaggerGen(c =>
 // --- Configure the HTTP Request Pipeline ---\
 var app = builder.Build();
 
-// Configure the HTTP request pipeline for development environment (Swagger UI)
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -131,14 +133,11 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// app.UseHttpsRedirection(); // Redirects HTTP requests to HTTPS
+app.UseCors("AllowAngularApp");
 
-// IMPORTANT: Order of CORS, Authentication, Authorization middleware matters!
-app.UseCors("AllowAngularApp"); // CORS must be placed before UseAuthentication and UseAuthorization
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.UseAuthentication(); // Adds the authentication middleware (reads JWT token)
-app.UseAuthorization(); // Adds the authorization middleware (enforces [Authorize] attributes)
+app.MapControllers();
 
-app.MapControllers(); // Maps incoming requests to controller actions
-
-app.Run(); // Starts the application
+app.Run();
