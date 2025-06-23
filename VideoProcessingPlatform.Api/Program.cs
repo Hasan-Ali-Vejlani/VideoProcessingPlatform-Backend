@@ -56,6 +56,10 @@ builder.Services.AddSingleton<IMessageQueueService, AzureServiceBusMessageQueueS
 builder.Services.AddScoped<IVideoProcessingService, VideoProcessingService>();
 // --- End New Transcoding Job and Message Queue Related Services ---
 
+// --- Playback Related Services ---
+builder.Services.AddTransient<IVideoPlaybackService, VideoPlaybackService>();
+builder.Services.AddTransient<ICDNService, CDNService>();
+
 
 // 4. Configure JWT Authentication
 builder.Services

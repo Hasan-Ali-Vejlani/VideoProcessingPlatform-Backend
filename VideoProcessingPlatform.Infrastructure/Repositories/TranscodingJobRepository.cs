@@ -33,11 +33,9 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
         {
             // Attach the entity if it's not already tracked, then mark as modified
             _dbContext.Entry(job).State = EntityState.Modified;
-            // Ensure related entities are not marked as modified unless explicitly intended
-            // If you only want to update the job itself, you might need to load it first
-            // and then update its properties from the detached 'job' object.
-            // For now, assuming 'job' is retrieved and then passed back for update.
-
+            // If job.VideoRenditions is loaded and contains entities, they might also be marked.
+            // If only job properties are intended to be updated, consider fetching the entity first,
+            // updating its properties, and then saving changes. For now, this is assumed to be fine.
             return await _dbContext.SaveChangesAsync() > 0;
         }
 
@@ -45,34 +43,34 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
         public async Task<TranscodingJob?> GetById(Guid id)
         {
             return await _dbContext.TranscodingJobs
-                                   .Include(tj => tj.UploadMetadata) // Eager load UploadMetadata
-                                   .Include(tj => tj.EncodingProfile) // Eager load EncodingProfile
-                                   .Include(tj => tj.VideoRenditions) // Eager load associated renditions
-                                   .FirstOrDefaultAsync(tj => tj.Id == id);
+                                       .Include(tj => tj.UploadMetadata) // Eager load UploadMetadata
+                                       .Include(tj => tj.EncodingProfile) // Eager load EncodingProfile
+                                       .Include(tj => tj.VideoRenditions) // Eager load associated renditions
+                                       .FirstOrDefaultAsync(tj => tj.Id == id);
         }
 
         // Retrieves all transcoding jobs for a specific user.
         public async Task<IEnumerable<TranscodingJob>> GetByUserId(Guid userId)
         {
             return await _dbContext.TranscodingJobs
-                                   .Include(tj => tj.UploadMetadata)
-                                   .Include(tj => tj.EncodingProfile)
-                                   .Include(tj => tj.VideoRenditions)
-                                   .Where(tj => tj.UserId == userId)
-                                   .OrderByDescending(tj => tj.CreatedAt)
-                                   .ToListAsync();
+                                       .Include(tj => tj.UploadMetadata)
+                                       .Include(tj => tj.EncodingProfile)
+                                       .Include(tj => tj.VideoRenditions)
+                                       .Where(tj => tj.UserId == userId)
+                                       .OrderByDescending(tj => tj.CreatedAt)
+                                       .ToListAsync();
         }
 
         // Retrieves all transcoding jobs for a specific video (UploadMetadata).
         public async Task<IEnumerable<TranscodingJob>> GetByUploadMetadataId(Guid uploadMetadataId)
         {
             return await _dbContext.TranscodingJobs
-                                   .Include(tj => tj.UploadMetadata)
-                                   .Include(tj => tj.EncodingProfile)
-                                   .Include(tj => tj.VideoRenditions)
-                                   .Where(tj => tj.UploadMetadataId == uploadMetadataId)
-                                   .OrderByDescending(tj => tj.CreatedAt)
-                                   .ToListAsync();
+                                       .Include(tj => tj.UploadMetadata)
+                                       .Include(tj => tj.EncodingProfile)
+                                       .Include(tj => tj.VideoRenditions)
+                                       .Where(tj => tj.UploadMetadataId == uploadMetadataId)
+                                       .OrderByDescending(tj => tj.CreatedAt)
+                                       .ToListAsync();
         }
 
         // Adds a new video rendition to the database.
@@ -94,7 +92,25 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
         public async Task<IEnumerable<VideoRendition>> GetRenditionsByJobId(Guid jobId)
         {
             return await _dbContext.VideoRenditions
-                                   .Where(vr => vr.TranscodingJobId == jobId)
+                                       .Where(vr => vr.TranscodingJobId == jobId)
+                                       .ToListAsync();
+        }
+
+        /// <summary>
+        /// Retrieves completed video renditions for a specific video ID (UploadMetadataId).
+        /// This method is crucial for the video playback feature to find available renditions.
+        /// </summary>
+        /// <param name="videoId">The ID of the original uploaded video (UploadMetadataId).</param>
+        /// <returns>A collection of VideoRendition entities for completed renditions associated with the video.</returns>
+        public async Task<IEnumerable<VideoRendition>> GetCompletedRenditionsForVideo(Guid videoId)
+        {
+            // Find transcoding jobs associated with the original uploaded video (videoId corresponds to UploadMetadataId)
+            // where the job status is 'Completed'. Then select their associated renditions.
+            // We include TranscodingJob to filter by its status and UploadMetadataId.
+            return await _dbContext.VideoRenditions
+                                   .Include(r => r.TranscodingJob) // Ensure TranscodingJob is loaded for filtering
+                                   .Where(r => r.TranscodingJob.UploadMetadataId == videoId &&
+                                               r.TranscodingJob.Status == "Completed")
                                    .ToListAsync();
         }
     }

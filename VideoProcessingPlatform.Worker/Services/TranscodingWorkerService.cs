@@ -186,12 +186,21 @@ namespace VideoProcessingPlatform.Worker.Services
 
                                         if (storedPaths.Any())
                                         {
+                                            // --- IMPORTANT FIX: Ensure RenditionType exactly matches what you expect ---
+                                            // Use jobMessage.TargetResolution and jobMessage.TargetFormat for consistent naming.
+                                            string renditionTypeString = $"{jobMessage.TargetResolution}_{jobMessage.TargetFormat}".Replace("x", "p").ToLower(); // e.g., "1280p_mp4" or "640p_webm"
+                                            // You might also want to ensure this is consistent with how your EncodingProfile names are.
+                                            // For now, let's assume {resolution}_{format} is the desired string.
+
                                             renditions.Add(new VideoRenditionDto
                                             {
-                                                RenditionType = $"{jobMessage.TargetResolution}_{jobMessage.TargetFormat}",
+                                                Id = Guid.NewGuid(),
+                                                RenditionType = renditionTypeString,
                                                 StoragePath = storedPaths.First(),
                                                 IsEncrypted = jobMessage.ApplyDRM,
-                                                PlaybackUrl = storedPaths.First()
+                                                PlaybackUrl = storedPaths.First(),
+                                                Resolution = jobMessage.TargetResolution, // <-- ADD THIS
+                                                BitrateKbps = jobMessage.TargetBitrateKbps // <-- ADD THIS
                                             });
                                             _logger.LogInformation($"Uploaded transcoded rendition to: {storedPaths.First()}");
                                         }

@@ -32,5 +32,13 @@ namespace VideoProcessingPlatform.Core.Interfaces
 
         // Retrieves all renditions for a specific transcoding job.
         Task<IEnumerable<VideoRendition>> GetRenditionsByJobId(Guid jobId);
+
+        /// <summary>
+        /// Retrieves completed video renditions for a specific video ID (UploadMetadataId).
+        /// This method is crucial for the video playback feature to find available renditions.
+        /// </summary>
+        /// <param name="videoId">The ID of the original uploaded video (UploadMetadataId).</param>
+        /// <returns>A collection of VideoRendition entities for completed renditions associated with the video.</returns>
+        Task<IEnumerable<VideoRendition>> GetCompletedRenditionsForVideo(Guid videoId);
     }
 }

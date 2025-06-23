@@ -22,6 +22,16 @@ namespace VideoProcessingPlatform.Core.Entities
         [StringLength(512)]
         public string StoragePath { get; set; }
 
+        // This is important for selecting the correct playback quality.
+        [Required]
+        [StringLength(50)] // Sufficient length for resolution strings
+        public string Resolution { get; set; } = string.Empty;
+
+        // The video bitrate in kilobits per second (Kbps).
+        // Also crucial for quality selection and sorting.
+        [Required] // Bitrate should always be provided
+        public int BitrateKbps { get; set; }
+
         // Whether this rendition is encrypted (for CENC support)
         public bool IsEncrypted { get; set; } = false;
 

@@ -39,18 +39,6 @@ namespace VideoProcessingPlatform.Core.DTOs
         public List<VideoRenditionDto> Renditions { get; set; } = new List<VideoRenditionDto>();
     }
 
-    // DTO for representing a single video rendition.
-    public class VideoRenditionDto
-    {
-        public Guid Id { get; set; }
-        public Guid TranscodingJobId { get; set; }
-        public string RenditionType { get; set; }
-        public string StoragePath { get; set; }
-        public bool IsEncrypted { get; set; }
-        public string? PlaybackUrl { get; set; }
-        public DateTime GeneratedAt { get; set; }
-    }
-
     // DTO for general video details, potentially including its renditions.
     // This could be used for a 'My Videos' or 'Video Details' page later.
     public class VideoDetailsDto
