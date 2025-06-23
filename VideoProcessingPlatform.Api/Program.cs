@@ -52,7 +52,7 @@ builder.Services.AddScoped<IEncodingProfileService, EncodingProfileService>();
 
 // --- New: Transcoding Job and Message Queue Related Services ---
 builder.Services.AddScoped<ITranscodingJobRepository, TranscodingJobRepository>();
-builder.Services.AddSingleton<IMessageQueueService, InMemoryMessageQueueService>(); // Register the in-memory queue
+builder.Services.AddSingleton<IMessageQueueService, AzureServiceBusMessageQueueService>();
 builder.Services.AddScoped<IVideoProcessingService, VideoProcessingService>();
 // --- End New Transcoding Job and Message Queue Related Services ---
 

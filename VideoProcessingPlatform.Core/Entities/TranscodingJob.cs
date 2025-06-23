@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace VideoProcessingPlatform.Core.Entities
 {
@@ -33,6 +34,7 @@ namespace VideoProcessingPlatform.Core.Entities
         public int Progress { get; set; } = 0; // Default progress
 
         // Optional message for status updates or errors
+        [Column(TypeName = "nvarchar(max)")]
         public string? StatusMessage { get; set; }
 
         // Timestamp when the job was created/queued

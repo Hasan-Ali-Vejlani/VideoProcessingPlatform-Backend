@@ -35,7 +35,10 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         private async Task<BlobContainerClient> GetOrCreateContainer(string containerName)
         {
             BlobContainerClient containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
-            await containerClient.CreateIfNotExistsAsync();
+            // --- FIX: Remove PublicAccessType.BlobContainer to align with Storage Account settings ---
+            // If the storage account itself disallows public access, trying to set it at container level fails.
+            // We want containers to be private anyway for security, relying on SAS/CDN.
+            await containerClient.CreateIfNotExistsAsync(); // This will create as private if account disallows public.
             return containerClient;
         }
 
@@ -43,14 +46,13 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         public async Task<string> StoreChunk(Guid uploadId, int chunkIndex, Stream chunkData)
         {
             var containerClient = await GetOrCreateContainer(_uploadChunksContainerName);
-            // Chunk filenames will be like: {uploadId}/{chunkIndex}
             string blobName = $"{uploadId}/{chunkIndex}";
             BlobClient blobClient = containerClient.GetBlobClient(blobName);
 
-            chunkData.Position = 0; // Ensure stream is at the beginning
-            await blobClient.UploadAsync(chunkData, overwrite: true); // Overwrite if chunk is re-uploaded
+            chunkData.Position = 0;
+            await blobClient.UploadAsync(chunkData, overwrite: true);
 
-            return blobClient.Uri.ToString(); // Return the URI of the stored chunk
+            return blobClient.Uri.ToString();
         }
 
         // Merges all chunks for a given uploadId into a single final blob.
@@ -59,15 +61,10 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             var chunksContainerClient = await GetOrCreateContainer(_uploadChunksContainerName);
             var finalVideosContainerClient = await GetOrCreateContainer(_finalVideosContainerName);
 
-            // Construct the final blob name (e.g., originalFileName_uploadId.ext)
             string fileExtension = Path.GetExtension(originalFileName);
             string finalBlobName = $"{Path.GetFileNameWithoutExtension(originalFileName)}_{uploadId}{fileExtension}";
             BlobClient finalBlobClient = finalVideosContainerClient.GetBlobClient(finalBlobName);
 
-            // Create a list of block IDs. Azure Blob Storage supports putting blocks together.
-            // For simplicity here, we'll download chunks and re-upload.
-            // For very large files, consider using Azure Blob's Block Blob features (PutBlock, PutBlockList).
-            // This implementation downloads each chunk and writes to a MemoryStream.
             using (var mergedStream = new MemoryStream())
             {
                 for (int i = 0; i < totalChunks; i++)
@@ -80,36 +77,30 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                         throw new FileNotFoundException($"Chunk {i} for upload {uploadId} not found during merge.");
                     }
 
-                    await chunkBlobClient.DownloadToAsync(mergedStream);
-                    // Optionally, delete the chunk blob after downloading to save space
+                    var downloadResponse = await chunkBlobClient.DownloadContentAsync();
+                    await downloadResponse.Value.Content.ToStream().CopyToAsync(mergedStream);
+
                     await chunkBlobClient.DeleteIfExistsAsync();
                 }
 
-                mergedStream.Position = 0; // Reset stream position to the beginning before uploading
-                await finalBlobClient.UploadAsync(mergedStream, new BlobHttpHeaders { ContentType = "video/mp4" }); // Set appropriate content type
+                mergedStream.Position = 0;
+                await finalBlobClient.UploadAsync(mergedStream, new BlobHttpHeaders { ContentType = GetContentType(fileExtension) });
             }
 
-            // After merging, delete the temporary chunk directory (or all blobs with prefix)
-            // Listing and deleting blobs with the prefix "{uploadId}/"
-            await foreach (var blobItem in chunksContainerClient.GetBlobsByHierarchyAsync(prefix: $"{uploadId}/"))
+            await foreach (var blobItem in chunksContainerClient.GetBlobsAsync(prefix: $"{uploadId}/"))
             {
-                if (blobItem.IsBlob)
-                {
-                    await chunksContainerClient.GetBlobClient(blobItem.Prefix).DeleteIfExistsAsync();
-                }
+                await chunksContainerClient.GetBlobClient(blobItem.Name).DeleteIfExistsAsync();
             }
 
-            return finalBlobClient.Uri.ToString(); // Return the URI of the final merged file
+            return finalBlobClient.Uri.ToString();
         }
 
         // Retrieves a file stream from the storage service.
         public async Task<Stream> RetrieveFile(string path)
         {
-            // Parse the path to determine container and blob name
-            // Assuming 'path' is a full URI or a relative path indicating container/blob
             Uri uri = new Uri(path);
-            string containerName = uri.Segments[1].TrimEnd('/'); // Get the container name from the URL
-            string blobName = string.Join("", uri.Segments.Skip(2)).TrimStart('/'); // Get the blob name
+            string containerName = uri.Segments[1].TrimEnd('/');
+            string blobName = string.Join("", uri.Segments.Skip(2)).TrimStart('/');
 
             var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
             BlobClient blobClient = containerClient.GetBlobClient(blobName);
@@ -120,20 +111,19 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             }
 
             var response = await blobClient.DownloadContentAsync();
-            return response.Value.Content.ToStream(); // Return the content as a stream
+            return response.Value.Content.ToStream();
         }
 
         // Stores a generated thumbnail image.
         public async Task<string> StoreThumbnail(Guid videoId, byte[] imageData, int index)
         {
             var containerClient = await GetOrCreateContainer(_thumbnailsContainerName);
-            // Thumbnail filenames: {videoId}/{index}.jpg
             string blobName = $"{videoId}/{index}.jpg";
             BlobClient blobClient = containerClient.GetBlobClient(blobName);
 
             using (var stream = new MemoryStream(imageData))
             {
-                await blobClient.UploadAsync(stream, new BlobHttpHeaders { ContentType = "image/jpeg" });
+                await blobClient.UploadAsync(stream, new BlobHttpHeaders { ContentType = GetContentType(".jpg") });
             }
 
             return blobClient.Uri.ToString();
@@ -147,26 +137,55 @@ namespace VideoProcessingPlatform.Infrastructure.Services
 
             foreach (var entry in renditions)
             {
-                string renditionType = entry.Key; // e.g., "HLS_720p"
+                string renditionType = entry.Key;
                 Stream renditionStream = entry.Value;
 
-                // Rendition filenames: {jobId}/{renditionType}/manifest.m3u8 (or similar)
-                // Assuming renditionType might include format and resolution, e.g., "HLS_720p"
-                // For HLS, it's often a directory with a manifest and TS files.
-                // For DASH, similar with an MPD file and segments.
-                // This example stores a single file per rendition type.
-                // In a real scenario, you'd handle HLS/DASH manifest and segment files more granularly.
-                string blobName = $"{jobId}/{renditionType}/output"; // A generic name, actual file type will vary
+                string format = renditionType.Split('_').LastOrDefault()?.ToLower() ?? "mp4";
+
+                string fileExtension = GetFileExtensionForFormat(format);
+                string contentType = GetContentType(fileExtension);
+
+                string blobName = $"{jobId}/{renditionType}{fileExtension}";
 
                 BlobClient blobClient = containerClient.GetBlobClient(blobName);
 
                 renditionStream.Position = 0;
-                // You might need to infer content type or pass it in
-                await blobClient.UploadAsync(renditionStream, overwrite: true);
+                await blobClient.UploadAsync(renditionStream, new BlobHttpHeaders { ContentType = contentType });
                 storedPaths.Add(blobClient.Uri.ToString());
             }
 
             return storedPaths;
+        }
+
+        private string GetFileExtensionForFormat(string format)
+        {
+            return format.ToLower() switch
+            {
+                "mp4" => ".mp4",
+                "hls" => ".m3u8",
+                "dash" => ".mpd",
+                "webm" => ".webm",
+                "ogg" => ".ogg",
+                _ => ".bin",
+            };
+        }
+
+        private string GetContentType(string fileExtension)
+        {
+            return fileExtension.ToLower() switch
+            {
+                ".mp4" => "video/mp4",
+                ".m3u8" => "application/x-mpegURL",
+                ".ts" => "video/mp2t",
+                ".mpd" => "application/dash+xml",
+                ".webm" => "video/webm",
+                ".ogg" => "video/ogg",
+                ".jpg" => "image/jpeg",
+                ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                _ => "application/octet-stream",
+            };
         }
     }
 }
