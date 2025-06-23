@@ -45,11 +45,16 @@ builder.Services.AddScoped<IUploadMetadataRepository, UploadMetadataRepository>(
 builder.Services.AddSingleton<IFileStorageService, AzureBlobStorageService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 
-// --- New: Encoding Profile Related Services and Repositories ---
+// --- Encoding Profile Related Services and Repositories ---
 builder.Services.AddScoped<IEncodingProfileRepository, EncodingProfileRepository>();
 builder.Services.AddScoped<IFFmpegCommandBuilder, FFmpegCommandBuilder>();
 builder.Services.AddScoped<IEncodingProfileService, EncodingProfileService>();
-// --- End New Encoding Profile Related Services ---
+
+// --- New: Transcoding Job and Message Queue Related Services ---
+builder.Services.AddScoped<ITranscodingJobRepository, TranscodingJobRepository>();
+builder.Services.AddSingleton<IMessageQueueService, InMemoryMessageQueueService>(); // Register the in-memory queue
+builder.Services.AddScoped<IVideoProcessingService, VideoProcessingService>();
+// --- End New Transcoding Job and Message Queue Related Services ---
 
 
 // 4. Configure JWT Authentication
