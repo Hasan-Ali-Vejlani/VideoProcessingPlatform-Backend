@@ -40,6 +40,7 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
         }
 
         // Retrieves a transcoding job by its ID, including related entities.
+        // This method is already comprehensive and includes UploadMetadata, EncodingProfile, and VideoRenditions.
         public async Task<TranscodingJob?> GetById(Guid id)
         {
             return await _dbContext.TranscodingJobs
@@ -104,14 +105,27 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
         /// <returns>A collection of VideoRendition entities for completed renditions associated with the video.</returns>
         public async Task<IEnumerable<VideoRendition>> GetCompletedRenditionsForVideo(Guid videoId)
         {
-            // Find transcoding jobs associated with the original uploaded video (videoId corresponds to UploadMetadataId)
-            // where the job status is 'Completed'. Then select their associated renditions.
-            // We include TranscodingJob to filter by its status and UploadMetadataId.
             return await _dbContext.VideoRenditions
                                    .Include(r => r.TranscodingJob) // Ensure TranscodingJob is loaded for filtering
                                    .Where(r => r.TranscodingJob.UploadMetadataId == videoId &&
                                                r.TranscodingJob.Status == "Completed")
                                    .ToListAsync();
+        }
+
+        /// <summary>
+        /// Retrieves the most recent transcoding job for a specific video, including its renditions.
+        /// </summary>
+        /// <param name="videoId">The ID of the original uploaded video (UploadMetadataId).</param>
+        /// <returns>The latest TranscodingJob entity, or null if none found.</returns>
+        public async Task<TranscodingJob?> GetLatestJobForVideo(Guid videoId)
+        {
+            return await _dbContext.TranscodingJobs
+                                 .Include(tj => tj.VideoRenditions) // Eager load renditions
+                                 .Include(tj => tj.UploadMetadata) // Include UploadMetadata for DTO mapping
+                                 .Include(tj => tj.EncodingProfile) // Include EncodingProfile for DTO mapping
+                                 .Where(tj => tj.UploadMetadataId == videoId)
+                                 .OrderByDescending(tj => tj.CreatedAt) // --- FIX: Removed redundant 'tj.' here ---
+                                 .FirstOrDefaultAsync();
         }
     }
 }

@@ -18,8 +18,7 @@ namespace VideoProcessingPlatform.Infrastructure.Data
         public DbSet<EncodingProfile> EncodingProfiles { get; set; } = default!;
         public DbSet<TranscodingJob> TranscodingJobs { get; set; } = default!;
         public DbSet<VideoRendition> VideoRenditions { get; set; } = default!;
-        // If you are using the Thumbnail entity, uncomment this line:
-        // public DbSet<Thumbnail> Thumbnails { get; set; } = default!;
+        public DbSet<Thumbnail> Thumbnails { get; set; } = default!; // --- NEW: DbSet for Thumbnail entity ---
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -62,8 +61,8 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(um => um.OriginalStoragePath).HasMaxLength(512);
                 entity.Property(um => um.UploadStatus).IsRequired().HasMaxLength(50);
                 entity.Property(um => um.UploadedAt).IsRequired();
-                entity.Property(um => um.LastUpdatedAt).IsRequired(); // Property now in UploadMetadata.cs
-                entity.Property(um => um.SelectedThumbnailUrl).HasMaxLength(512); // Property now in UploadMetadata.cs
+                entity.Property(um => um.LastUpdatedAt).IsRequired();
+                entity.Property(um => um.SelectedThumbnailUrl).HasMaxLength(512);
 
                 entity.HasOne(um => um.User)
                       .WithMany(u => u.UploadMetadata)
@@ -74,11 +73,12 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                       .WithOne(tj => tj.UploadMetadata)
                       .HasForeignKey(tj => tj.UploadMetadataId)
                       .OnDelete(DeleteBehavior.Restrict);
-                // If Thumbnail entity exists and UploadMetadata.cs has ICollection<Thumbnail>, uncomment this:
-                // entity.HasMany(um => um.Thumbnails)
-                //       .WithOne(t => t.UploadMetadata)
-                //       .HasForeignKey(t => t.UploadMetadataId)
-                //       .OnDelete(DeleteBehavior.Cascade);
+
+                // --- NEW: Relationship between UploadMetadata and Thumbnail ---
+                entity.HasMany(um => um.Thumbnails) // As defined in UploadMetadata.cs
+                      .WithOne(t => t.UploadMetadata)
+                      .HasForeignKey(t => t.UploadMetadataId)
+                      .OnDelete(DeleteBehavior.Cascade); // If video metadata is deleted, its thumbnails are deleted
             });
 
             // Configure EncodingProfile entity
@@ -95,7 +95,7 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(ep => ep.IsActive).IsRequired();
                 entity.Property(ep => ep.CreatedAt).IsRequired();
                 entity.Property(ep => ep.LastModifiedAt).IsRequired();
-                entity.Property(ep => ep.ApplyDRM).IsRequired(); // Property now in EncodingProfile.cs
+                entity.Property(ep => ep.ApplyDRM).IsRequired();
 
                 entity.HasMany(ep => ep.TranscodingJobs)
                       .WithOne(tj => tj.EncodingProfile)
@@ -113,12 +113,12 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(tj => tj.StatusMessage).HasMaxLength(1000);
                 entity.Property(tj => tj.CreatedAt).IsRequired();
                 entity.Property(tj => tj.LastUpdatedAt).IsRequired();
-                entity.Property(tj => tj.EncodingProfileName).IsRequired().HasMaxLength(255); // Property now in TranscodingJob.cs
-                entity.Property(tj => tj.TargetResolution).IsRequired().HasMaxLength(50); // Property now in TranscodingJob.cs
-                entity.Property(tj => tj.TargetBitrateKbps).IsRequired(); // Property now in TranscodingJob.cs
-                entity.Property(tj => tj.TargetFormat).IsRequired().HasMaxLength(50); // Property now in TranscodingJob.cs
-                entity.Property(tj => tj.FFmpegArgsTemplate).IsRequired().HasMaxLength(4000); // Property now in TranscodingJob.cs
-                entity.Property(tj => tj.ApplyDRM).IsRequired(); // Property now in TranscodingJob.cs
+                entity.Property(tj => tj.EncodingProfileName).IsRequired().HasMaxLength(255);
+                entity.Property(tj => tj.TargetResolution).IsRequired().HasMaxLength(50);
+                entity.Property(tj => tj.TargetBitrateKbps).IsRequired();
+                entity.Property(tj => tj.TargetFormat).IsRequired().HasMaxLength(50);
+                entity.Property(tj => tj.FFmpegArgsTemplate).IsRequired().HasMaxLength(4000);
+                entity.Property(tj => tj.ApplyDRM).IsRequired();
 
                 entity.HasOne(tj => tj.UploadMetadata)
                       .WithMany(um => um.TranscodingJobs)
@@ -148,10 +148,26 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(vr => vr.RenditionType).IsRequired().HasMaxLength(100);
                 entity.Property(vr => vr.StoragePath).IsRequired().HasMaxLength(512);
                 entity.Property(vr => vr.IsEncrypted).IsRequired();
-                entity.Property(vr => vr.PlaybackUrl).HasMaxLength(1024); // Increased length
+                entity.Property(vr => vr.PlaybackUrl).HasMaxLength(1024);
                 entity.Property(vr => vr.GeneratedAt).IsRequired();
-                entity.Property(vr => vr.Resolution).IsRequired().HasMaxLength(50); // Property now in VideoRendition.cs
-                entity.Property(vr => vr.BitrateKbps).IsRequired(); // Property now in VideoRendition.cs
+                entity.Property(vr => vr.Resolution).IsRequired().HasMaxLength(50);
+                entity.Property(vr => vr.BitrateKbps).IsRequired();
+            });
+
+            // --- NEW: Configure Thumbnail entity ---
+            modelBuilder.Entity<Thumbnail>(entity =>
+            {
+                entity.HasKey(t => t.Id);
+                entity.Property(t => t.StoragePath).IsRequired().HasMaxLength(512); // Path to the thumbnail image
+                entity.Property(t => t.TimestampSeconds).IsRequired(); // Time in video (seconds)
+                entity.Property(t => t.Order).IsRequired(); // Display order
+                entity.Property(t => t.IsDefault).IsRequired(); // Whether it's the default
+                entity.Property(t => t.GeneratedAt).IsRequired();
+
+                entity.HasOne(t => t.UploadMetadata) // One-to-many relationship with UploadMetadata
+                      .WithMany(um => um.Thumbnails) // Navigation property on UploadMetadata
+                      .HasForeignKey(t => t.UploadMetadataId)
+                      .OnDelete(DeleteBehavior.Cascade); // If UploadMetadata is deleted, its thumbnails are deleted
             });
 
 

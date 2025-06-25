@@ -6,7 +6,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore; // For includes and no-tracking queries
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using VideoProcessingPlatform.Core.Extensions; // --- NEW: Add this using statement ---
 
 namespace VideoProcessingPlatform.Infrastructure.Services
 {
@@ -17,78 +19,92 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         private readonly IUploadMetadataRepository _uploadRepository;
         private readonly IEncodingProfileRepository _profileRepository;
         private readonly IMessageQueueService _messageQueueService;
-        private readonly IFileStorageService _fileStorageService; // Potentially used for generating playback URLs later
+        private readonly IFileStorageService _fileStorageService;
+        private readonly IThumbnailService _thumbnailService;
+        private readonly ILogger<VideoProcessingService> _logger;
 
         public VideoProcessingService(
             ITranscodingJobRepository jobRepository,
             IUploadMetadataRepository uploadRepository,
             IEncodingProfileRepository profileRepository,
             IMessageQueueService messageQueueService,
-            IFileStorageService fileStorageService)
+            IFileStorageService fileStorageService,
+            IThumbnailService thumbnailService,
+            ILogger<VideoProcessingService> logger)
         {
             _jobRepository = jobRepository;
             _uploadRepository = uploadRepository;
             _profileRepository = profileRepository;
             _messageQueueService = messageQueueService;
             _fileStorageService = fileStorageService;
+            _thumbnailService = thumbnailService;
+            _logger = logger;
         }
 
         // Initiates a new transcoding job.
         public async Task<TranscodingJobInitiatedDto> InitiateTranscoding(Guid userId, InitiateTranscodingRequestDto request)
         {
-            // 1. Validate Uploaded Video (UploadMetadata) existence and status
             var uploadMetadata = await _uploadRepository.GetById(request.VideoId);
             if (uploadMetadata == null)
             {
+                _logger.LogWarning($"Attempt to initiate transcoding for non-existent video ID: {request.VideoId}");
                 throw new KeyNotFoundException($"Uploaded video with ID '{request.VideoId}' not found.");
             }
             if (uploadMetadata.UploadStatus != "Completed")
             {
+                _logger.LogWarning($"Video upload for ID '{request.VideoId}' not completed. Current status: {uploadMetadata.UploadStatus}");
                 throw new InvalidOperationException($"Video upload for ID '{request.VideoId}' is not yet completed. Current status: {uploadMetadata.UploadStatus}");
             }
             if (uploadMetadata.UserId != userId)
             {
+                _logger.LogWarning($"User {userId} attempted to transcode video {request.VideoId} belonging to another user.");
                 throw new UnauthorizedAccessException($"User is not authorized to transcode video with ID '{request.VideoId}'.");
             }
 
-            // 2. Validate Encoding Profile existence and activeness
             var encodingProfile = await _profileRepository.GetById(request.EncodingProfileId);
             if (encodingProfile == null || !encodingProfile.IsActive)
             {
+                _logger.LogWarning($"Encoding profile with ID '{request.EncodingProfileId}' not found or is inactive.");
                 throw new KeyNotFoundException($"Encoding profile with ID '{request.EncodingProfileId}' not found or is inactive.");
             }
 
-            // 3. Create a new TranscodingJob entry in the database
             var newJob = new TranscodingJob
             {
                 UploadMetadataId = request.VideoId,
                 UserId = userId,
                 EncodingProfileId = request.EncodingProfileId,
-                SourceStoragePath = uploadMetadata.OriginalStoragePath, // Use the path from the completed upload
-                Status = "Queued", // Initial status
+                SourceStoragePath = uploadMetadata.OriginalStoragePath,
+                Status = "Queued",
                 Progress = 0,
                 StatusMessage = "Job created and queued for processing.",
                 CreatedAt = DateTime.UtcNow,
-                LastUpdatedAt = DateTime.UtcNow
+                LastUpdatedAt = DateTime.UtcNow,
+                EncodingProfileName = encodingProfile.ProfileName,
+                TargetResolution = encodingProfile.Resolution,
+                TargetBitrateKbps = encodingProfile.BitrateKbps,
+                TargetFormat = encodingProfile.Format,
+                FFmpegArgsTemplate = encodingProfile.FFmpegArgsTemplate,
+                ApplyDRM = encodingProfile.ApplyDRM
             };
 
             var createdJob = await _jobRepository.Add(newJob);
+            _logger.LogInformation($"Transcoding job {createdJob.Id} created for video {request.VideoId} with profile {request.EncodingProfileId}.");
 
-            // 4. Create a message for the Transcoding Worker and publish to Message Queue
             var jobMessage = new TranscodingJobMessage
             {
                 TranscodingJobId = createdJob.Id,
                 UploadMetadataId = createdJob.UploadMetadataId,
                 SourceVideoPath = createdJob.SourceStoragePath,
-                FFmpegArgsTemplate = encodingProfile.FFmpegArgsTemplate,
-                TargetFormat = encodingProfile.Format,
-                TargetResolution = encodingProfile.Resolution,
-                TargetBitrateKbps = encodingProfile.BitrateKbps,
-                ApplyWatermark = false, // Placeholder: implement logic for this later
-                ApplyDRM = false // Placeholder: implement logic for this later (CENC)
+                FFmpegArgsTemplate = createdJob.FFmpegArgsTemplate,
+                TargetFormat = createdJob.TargetFormat,
+                TargetResolution = createdJob.TargetResolution,
+                TargetBitrateKbps = createdJob.TargetBitrateKbps,
+                ApplyWatermark = false,
+                ApplyDRM = createdJob.ApplyDRM
             };
 
             await _messageQueueService.PublishTranscodingJob(jobMessage);
+            _logger.LogInformation($"Transcoding job {createdJob.Id} message published to queue.");
 
             return new TranscodingJobInitiatedDto
             {
@@ -98,7 +114,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             };
         }
 
-        // Retrieves the status of a specific transcoding job.
         public async Task<TranscodingJobDto?> GetTranscodingJobStatus(Guid jobId)
         {
             var job = await _jobRepository.GetById(jobId);
@@ -107,41 +122,27 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             {
                 return null;
             }
-
-            // Ensure UploadMetadata and EncodingProfile are loaded for mapping
-            if (job.UploadMetadata == null)
-            {
-                job.UploadMetadata = await _uploadRepository.GetById(job.UploadMetadataId) ?? throw new InvalidOperationException("UploadMetadata not found for transcoding job.");
-            }
-            if (job.EncodingProfile == null)
-            {
-                job.EncodingProfile = await _profileRepository.GetById(job.EncodingProfileId) ?? throw new InvalidOperationException("EncodingProfile not found for transcoding job.");
-            }
-
             return MapToDto(job);
         }
 
-        // Retrieves all transcoding jobs for a given user.
         public async Task<IEnumerable<TranscodingJobDto>> GetUserTranscodingJobs(Guid userId)
         {
             var jobs = await _jobRepository.GetByUserId(userId);
             return jobs.Select(MapToDto).ToList();
         }
 
-        // Retrieves all transcoding jobs for a specific uploaded video.
         public async Task<IEnumerable<TranscodingJobDto>> GetTranscodingJobsForVideo(Guid videoId)
         {
             var jobs = await _jobRepository.GetByUploadMetadataId(videoId);
             return jobs.Select(MapToDto).ToList();
         }
 
-        // Updates job progress from the worker (intended for internal use by worker)
         public async Task UpdateTranscodingJobProgress(Guid jobId, int progress, string statusMessage, string status)
         {
             var job = await _jobRepository.GetById(jobId);
             if (job == null)
             {
-                // Log: Job not found for progress update
+                _logger.LogWarning($"Job {jobId} not found for progress update.");
                 return;
             }
 
@@ -151,15 +152,15 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             job.LastUpdatedAt = DateTime.UtcNow;
 
             await _jobRepository.Update(job);
+            _logger.LogInformation($"Transcoding job {jobId} progress updated to {progress}% ({status}).");
         }
 
-        // Completes a job from the worker, adding renditions (intended for internal use by worker)
         public async Task CompleteTranscodingJob(Guid jobId, List<VideoRenditionDto> renditionDtos)
         {
             var job = await _jobRepository.GetById(jobId);
             if (job == null)
             {
-                // Log: Job not found for completion
+                _logger.LogWarning($"Job {jobId} not found for completion.");
                 return;
             }
 
@@ -168,7 +169,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             job.StatusMessage = "Transcoding completed successfully.";
             job.LastUpdatedAt = DateTime.UtcNow;
 
-            // Add renditions
             foreach (var renditionDto in renditionDtos)
             {
                 var rendition = new VideoRendition
@@ -177,31 +177,92 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                     RenditionType = renditionDto.RenditionType,
                     StoragePath = renditionDto.StoragePath,
                     IsEncrypted = renditionDto.IsEncrypted,
-                    PlaybackUrl = renditionDto.PlaybackUrl, // Will be generated by CDN service later
+                    Resolution = renditionDto.Resolution,
+                    BitrateKbps = renditionDto.BitrateKbps,
+                    PlaybackUrl = renditionDto.PlaybackUrl,
                     GeneratedAt = DateTime.UtcNow
                 };
-                await _jobRepository.AddRendition(rendition);
+                job.VideoRenditions.Add(rendition);
             }
 
             await _jobRepository.Update(job);
+            _logger.LogInformation($"Transcoding job {jobId} marked as completed with {renditionDtos.Count} renditions.");
         }
 
-        // Marks a job as failed (intended for internal use by worker)
         public async Task FailTranscodingJob(Guid jobId, string errorMessage)
         {
             var job = await _jobRepository.GetById(jobId);
             if (job == null)
             {
-                // Log: Job not found for failure
+                _logger.LogWarning($"Job {jobId} not found for failure.");
                 return;
             }
 
             job.Status = "Failed";
-            job.Progress = job.Progress; // Keep last known progress
+            job.Progress = job.Progress;
             job.StatusMessage = errorMessage;
             job.LastUpdatedAt = DateTime.UtcNow;
 
             await _jobRepository.Update(job);
+            _logger.LogError($"Transcoding job {jobId} failed: {errorMessage}");
+        }
+
+        // --- Implement GetVideoDetailsAsync for frontend display ---
+        public async Task<VideoDetailsDto?> GetVideoDetailsAsync(Guid videoId, Guid userId)
+        {
+            // --- FIX: Call GetByIdWithThumbnails from IUploadMetadataRepository ---
+            var uploadMetadata = await _uploadRepository.GetByIdWithThumbnails(videoId);
+            if (uploadMetadata == null || uploadMetadata.UserId != userId)
+            {
+                _logger.LogWarning($"Video details requested for non-existent video {videoId} or unauthorized user {userId}.");
+                return null;
+            }
+
+            // --- FIX: Call GetLatestJobForVideo from ITranscodingJobRepository ---
+            var latestJob = await _jobRepository.GetLatestJobForVideo(videoId);
+
+            var videoDetailsDto = new VideoDetailsDto
+            {
+                Id = uploadMetadata.Id,
+                UserId = uploadMetadata.UserId,
+                OriginalFileName = uploadMetadata.OriginalFileName,
+                OriginalFileSize = uploadMetadata.OriginalFileSize,
+                MimeType = uploadMetadata.MimeType,
+                UploadStatus = uploadMetadata.UploadStatus,
+                UploadedAt = uploadMetadata.UploadedAt,
+                LastUpdatedAt = uploadMetadata.LastUpdatedAt,
+
+                SelectedThumbnail = uploadMetadata.Thumbnails
+                                    .FirstOrDefault(t => t.IsDefault)?
+                                    .ToDto() ?? uploadMetadata.Thumbnails.FirstOrDefault()?.ToDto(),
+
+                AllThumbnails = uploadMetadata.Thumbnails
+                                .OrderBy(t => t.Order)
+                                .Select(t => t.ToDto())
+                                .ToList(),
+
+                AvailableRenditions = latestJob?.VideoRenditions
+                                        .OrderByDescending(vr => vr.BitrateKbps)
+                                        .Select(vr => vr.ToDto())
+                                        .ToList() ?? new List<VideoRenditionDto>(),
+
+                LatestTranscodingJob = latestJob != null ? MapToDto(latestJob) : null
+            };
+
+            return videoDetailsDto;
+        }
+
+        // --- Implement GetAllThumbnailsForVideoAsync ---
+        public async Task<IEnumerable<ThumbnailDto>> GetAllThumbnailsForVideoAsync(Guid videoId)
+        {
+            var thumbnails = await _thumbnailService.GetThumbnailsForVideoAsync(videoId);
+            return thumbnails;
+        }
+
+        // --- Implement SetDefaultThumbnailAsync ---
+        public async Task<SetSelectedThumbnailResponseDto> SetDefaultThumbnailAsync(Guid videoId, Guid thumbnailId)
+        {
+            return await _thumbnailService.SetDefaultThumbnailAsync(videoId, thumbnailId);
         }
 
         // Helper method to map TranscodingJob entity to TranscodingJobDto.
@@ -210,10 +271,10 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             return new TranscodingJobDto
             {
                 Id = job.Id,
-                UserId = job.UserId, // <--- ADDED THIS LINE: Populate UserId from entity
+                UserId = job.UserId,
                 VideoId = job.UploadMetadataId,
-                OriginalFileName = job.UploadMetadata?.OriginalFileName ?? "N/A", // Use null conditional operator
-                EncodingProfileName = job.EncodingProfile?.ProfileName ?? "N/A", // Use null conditional operator
+                OriginalFileName = job.UploadMetadata?.OriginalFileName ?? "N/A",
+                EncodingProfileName = job.EncodingProfile?.ProfileName ?? job.EncodingProfileName,
                 Status = job.Status,
                 Progress = job.Progress,
                 StatusMessage = job.StatusMessage,
@@ -227,9 +288,12 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                     StoragePath = vr.StoragePath,
                     IsEncrypted = vr.IsEncrypted,
                     PlaybackUrl = vr.PlaybackUrl,
-                    GeneratedAt = vr.GeneratedAt
+                    GeneratedAt = vr.GeneratedAt,
+                    Resolution = vr.Resolution,
+                    BitrateKbps = vr.BitrateKbps
                 }).ToList() ?? new List<VideoRenditionDto>()
             };
         }
     }
+    // --- REMOVED: EntityToDtoExtensions nested class. It's now in its own file. ---
 }

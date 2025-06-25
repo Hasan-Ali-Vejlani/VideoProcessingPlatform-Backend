@@ -61,5 +61,18 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
                                    .OrderByDescending(um => um.UploadedAt)
                                    .ToListAsync();
         }
+
+        // --- NEW METHOD: GetByIdWithThumbnails (from UploadMetadataRepository.cs placeholder) ---
+        /// <summary>
+        /// Retrieves an UploadMetadata record by its ID, including all associated Thumbnail entities.
+        /// </summary>
+        /// <param name="id">The unique ID of the UploadMetadata record.</param>
+        /// <returns>The UploadMetadata entity with Thumbnails eagerly loaded, or null if not found.</returns>
+        public async Task<UploadMetadata?> GetByIdWithThumbnails(Guid id)
+        {
+            return await _dbContext.UploadMetadata
+                                 .Include(um => um.Thumbnails) // Eager load thumbnails
+                                 .FirstOrDefaultAsync(um => um.Id == id);
+        }
     }
 }

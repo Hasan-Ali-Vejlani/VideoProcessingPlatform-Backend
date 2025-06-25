@@ -72,6 +72,10 @@ builder.Services.AddTransient<ICDNService>(provider =>
     )
 );
 
+// --- Thumbnail Related Services and Repositories ---
+builder.Services.AddScoped<IThumbnailRepository, ThumbnailRepository>(); // --- NEW ---
+builder.Services.AddScoped<IThumbnailService, ThumbnailService>();       // --- NEW ---
+
 
 // 4. Configure JWT Authentication
 builder.Services

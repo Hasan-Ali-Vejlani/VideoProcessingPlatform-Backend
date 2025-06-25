@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims; // To get user ID from JWT token
+using System.Linq; // Required for .Any() and .FirstOrDefault()
 
 namespace VideoProcessingPlatform.Api.Controllers
 {
@@ -26,7 +27,7 @@ namespace VideoProcessingPlatform.Api.Controllers
             _encodingProfileService = encodingProfileService;
         }
 
-        // Helper to get current user's ID from JWT token claims
+        // Helper to get current user's ID from JWT token claims (using the provided existing implementation)
         private Guid GetCurrentUserId()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -69,6 +70,7 @@ namespace VideoProcessingPlatform.Api.Controllers
             {
                 var userId = GetCurrentUserId();
                 var response = await _videoProcessingService.InitiateTranscoding(userId, request);
+                // Using CreatedAtAction to return a 201 Created status with a Location header
                 return CreatedAtAction(nameof(GetTranscodingJobStatus), new { jobId = response.JobId }, response);
             }
             catch (KeyNotFoundException ex)
@@ -141,6 +143,126 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
+        // --- NEW: API Endpoints for Thumbnail Feature ---
+
+        /// <summary>
+        /// Gets comprehensive details for a specific video, including its currently selected thumbnail and available renditions.
+        /// </summary>
+        /// <param name="videoId">The ID of the video (UploadMetadata.Id).</param>
+        /// <returns>Video details including thumbnail and renditions.</returns>
+        [HttpGet("video/{videoId}/details")] // GET /api/videoprocessing/video/{videoId}/details
+        public async Task<IActionResult> GetVideoDetails(Guid videoId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var videoDetails = await _videoProcessingService.GetVideoDetailsAsync(videoId, userId);
+
+                if (videoDetails == null)
+                {
+                    // Return NotFound if video not found or user is not authorized to view it
+                    return NotFound($"Video with ID '{videoId}' not found or you do not have access.");
+                }
+                return Ok(videoDetails);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"An error occurred while retrieving video details: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Gets all generated thumbnails for a specific video.
+        /// </summary>
+        /// <param name="videoId">The ID of the video (UploadMetadata.Id).</param>
+        /// <returns>A list of thumbnail DTOs for the video.</returns>
+        [HttpGet("video/{videoId}/thumbnails")] // GET /api/videoprocessing/video/{videoId}/thumbnails
+        public async Task<IActionResult> GetAllThumbnailsForVideo(Guid videoId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                // First, check if the user has access to the video itself
+                var videoExistsAndAuthorized = await _videoProcessingService.GetVideoDetailsAsync(videoId, userId) != null;
+                if (!videoExistsAndAuthorized)
+                {
+                    return NotFound($"Video with ID '{videoId}' not found or you do not have access to its thumbnails.");
+                }
+
+                var thumbnails = await _videoProcessingService.GetAllThumbnailsForVideoAsync(videoId);
+                return Ok(thumbnails);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"An error occurred while retrieving video thumbnails: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// Sets a specific thumbnail as the default for a given video.
+        /// </summary>
+        /// <param name="videoId">The ID of the video (UploadMetadata.Id).</param>
+        /// <param name="request">DTO containing the ID of the thumbnail to set as default.</param>
+        /// <returns>Confirmation of default thumbnail update.</returns>
+        [HttpPut("video/{videoId}/thumbnail")] // PUT /api/videoprocessing/video/{videoId}/thumbnail
+        public async Task<IActionResult> SetDefaultThumbnail(Guid videoId, [FromBody] SetSelectedThumbnailRequestDto request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                // Basic validation: ensure videoId in URL matches request body
+                if (request.VideoId != videoId)
+                {
+                    return BadRequest("Video ID in URL does not match Video ID in request body.");
+                }
+
+                // Verify the user owns/has access to this video and the thumbnail belongs to it
+                var videoDetails = await _videoProcessingService.GetVideoDetailsAsync(videoId, userId);
+                if (videoDetails == null)
+                {
+                    return NotFound($"Video with ID '{videoId}' not found or you do not have access to modify it.");
+                }
+
+                // Further validation: Ensure the selected thumbnail actually belongs to this video
+                if (!videoDetails.AllThumbnails.Any(t => t.Id == request.ThumbnailId))
+                {
+                    return BadRequest($"Thumbnail with ID '{request.ThumbnailId}' does not belong to video '{videoId}'.");
+                }
+
+                var response = await _videoProcessingService.SetDefaultThumbnailAsync(videoId, request.ThumbnailId);
+                if (response.Success)
+                {
+                    return Ok(response);
+                }
+                else
+                {
+                    return BadRequest(response); // Return BadRequest with the service's error message
+                }
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"An error occurred while setting default thumbnail: {ex.Message}" });
+            }
+        }
+
+
         // --- Internal/Worker-Facing Endpoints (could be in a separate internal API) ---
         // For this demo, placing them here but note they should be secured differently or on a separate port/internal service.
         // For production, these should ideally be secured by API Key or internal network rules, not just JWTBearer.
@@ -150,10 +272,11 @@ namespace VideoProcessingPlatform.Api.Controllers
         /// </summary>
         [HttpPut("internal/jobs/{jobId}/progress")]
         [AllowAnonymous] // TEMPORARY: In production, secure this with API Key or specific internal auth
-        public async Task<IActionResult> UpdateJobProgress(Guid jobId, [FromBody] TranscodingJobDto update)
+        public async Task<IActionResult> UpdateJobProgress(Guid jobId, [FromBody] UpdateTranscodingProgressRequestDto update) // Changed from TranscodingJobDto to UpdateTranscodingProgressRequestDto
         {
             try
             {
+                // Ensure the DTO passed to the service aligns with its parameters
                 await _videoProcessingService.UpdateTranscodingJobProgress(jobId, update.Progress, update.StatusMessage ?? "", update.Status);
                 return Ok();
             }

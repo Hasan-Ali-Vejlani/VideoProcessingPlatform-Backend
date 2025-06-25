@@ -1,27 +1,31 @@
 ﻿// VideoProcessingPlatform.Core/Interfaces/IUploadMetadataRepository.cs
+using VideoProcessingPlatform.Core.Entities;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using VideoProcessingPlatform.Core.Entities;
 
 namespace VideoProcessingPlatform.Core.Interfaces
 {
     // Interface for data access operations related to UploadMetadata entities.
     public interface IUploadMetadataRepository
     {
-        // Adds new upload metadata to the repository.
+        // Adds a new UploadMetadata record to the database.
         Task<UploadMetadata> Add(UploadMetadata uploadMetadata);
 
-        // Retrieves upload metadata by its unique ID.
+        // Retrieves an UploadMetadata record by its ID.
         Task<UploadMetadata?> GetById(Guid id);
 
-        // Updates an existing upload metadata record.
+        // Updates an existing UploadMetadata record in the database.
         Task<bool> Update(UploadMetadata uploadMetadata);
 
-        // Gets all upload metadata records for a specific user.
+        // Retrieves all UploadMetadata records for a given user ID.
         Task<IEnumerable<UploadMetadata>> GetByUserId(Guid userId);
 
-        // Gets upload metadata records for a specific user filtered by status.
+        // Retrieves UploadMetadata records for a specific user filtered by status.
         Task<IEnumerable<UploadMetadata>> GetByUserIdAndStatus(Guid userId, string status);
+
+        // --- NEW: Retrieves an UploadMetadata record by its ID, including all associated Thumbnail entities. ---
+        Task<UploadMetadata?> GetByIdWithThumbnails(Guid id);
     }
 }

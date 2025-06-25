@@ -38,16 +38,4 @@ namespace VideoProcessingPlatform.Core.DTOs
         public DateTime LastUpdatedAt { get; set; }
         public List<VideoRenditionDto> Renditions { get; set; } = new List<VideoRenditionDto>();
     }
-
-    // DTO for general video details, potentially including its renditions.
-    // This could be used for a 'My Videos' or 'Video Details' page later.
-    public class VideoDetailsDto
-    {
-        public Guid VideoId { get; set; }
-        public string FileName { get; set; }
-        public string OriginalStoragePath { get; set; }
-        public string UploadStatus { get; set; }
-        public DateTime UploadedAt { get; set; }
-        public List<TranscodingJobDto> TranscodingJobs { get; set; } = new List<TranscodingJobDto>();
-    }
 }

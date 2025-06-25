@@ -49,21 +49,20 @@ namespace VideoProcessingPlatform.Core.Entities
         // Timestamp when the upload session was initiated.
         public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 
-        // --- NEW: Timestamp when the upload metadata or status was last updated (REQUIRED by ApplicationDbContext) ---
+        // Timestamp when the upload metadata or status was last updated
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
 
-        // --- NEW: Stores the URL of the thumbnail selected by the user as the primary for this video (REQUIRED by ApplicationDbContext) ---
+        // Stores the URL of the thumbnail selected by the user as the primary for this video
         [StringLength(512)] // Ensure adequate length for URLs
         public string? SelectedThumbnailUrl { get; set; } // Can be null initially
 
-        // --- Navigation Property for the User who owns this upload (Ensuring it's non-nullable for EF Core) ---
+        // --- Navigation Property for the User who owns this upload ---
         public User User { get; set; } = null!; // Initialized to null! to indicate it will be populated by EF Core
 
-        // --- NEW: Navigation collection for related transcoding jobs (REQUIRED by ApplicationDbContext) ---
+        // --- Navigation collection for related transcoding jobs ---
         public ICollection<TranscodingJob> TranscodingJobs { get; set; } = new List<TranscodingJob>();
 
-        // --- NEW: Navigation collection for generated thumbnails (for this video) (REQUIRED if Thumbnail entity is used) ---
-        // Uncomment this if you have or plan to add the Thumbnail entity.
-        // public ICollection<Thumbnail> Thumbnails { get; set; } = new List<Thumbnail>();
+        // --- NEW: Navigation collection for generated thumbnails (for this video) ---
+        public ICollection<Thumbnail> Thumbnails { get; set; } = new List<Thumbnail>();
     }
 }
