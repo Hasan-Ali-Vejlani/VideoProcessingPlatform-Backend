@@ -206,15 +206,20 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 string fileExtension = GetFileExtensionForFormat(format);
                 string contentType = GetContentType(fileExtension);
 
+                // Construct blob name as relative path within the container
                 string blobName = $"{jobId}/{renditionType}{fileExtension}";
 
                 BlobClient blobClient = containerClient.GetBlobClient(blobName);
 
                 renditionStream.Position = 0;
                 await blobClient.UploadAsync(renditionStream, new BlobHttpHeaders { ContentType = contentType });
-                // --- FIX: Store FULL URI here again for consistency with existing playback logic ---
+                // --- FIX: Store relative path only, not full URI, if that's what's in the DB ---
+                // Assuming the database column `VideoRendition.StoragePath` is designed to store
+                // only the relative path (e.g., "renditions/jobId/file.mp4") and not the full blob URI.
+                // If your DB expects full URI, change this back to blobClient.Uri.ToString();
+                // storedPaths.Add($"{containerClient.Name}/{blobName}"); // Store "containerName/blobName"
                 storedPaths.Add(blobClient.Uri.ToString());
-                _logger.LogInformation($"Stored rendition {renditionType}. Full URI: {blobClient.Uri}");
+                _logger.LogInformation($"Stored rendition {renditionType}. Relative Path: {containerClient.Name}/{blobName}");
             }
 
             return storedPaths;
@@ -222,16 +227,16 @@ namespace VideoProcessingPlatform.Infrastructure.Services
 
         /// <summary>
         /// Generates a Shared Access Signature (SAS) URL for a specific blob.
-        /// This method now expects a 'blobUri' in the format "https://storageaccount.blob.core.windows.net/containerName/blobName".
+        /// This method now expects a 'blobRelativePath' in the format "containerName/blobName".
         /// </summary>
-        /// <param name="blobUri">The full URI of the blob (e.g., from StoragePath of VideoRendition).</param>
+        /// <param name="blobRelativePath">The relative path of the blob (e.g., "renditions/jobId/file.mp4").</param>
         /// <param name="expiresIn">The duration for which the SAS URL will be valid.</param>
         /// <returns>The full Blob SAS URL.</returns>
-        public async Task<string> GenerateBlobSasUrl(string blobUri, TimeSpan expiresIn)
+        public async Task<string> GenerateBlobSasUrl(string blobRelativePath, TimeSpan expiresIn)
         {
-            if (string.IsNullOrWhiteSpace(blobUri))
+            if (string.IsNullOrWhiteSpace(blobRelativePath))
             {
-                throw new ArgumentNullException(nameof(blobUri), "Blob URI cannot be null or empty.");
+                throw new ArgumentNullException(nameof(blobRelativePath), "Blob relative path cannot be null or empty.");
             }
             if (expiresIn <= TimeSpan.Zero)
             {
@@ -240,19 +245,26 @@ namespace VideoProcessingPlatform.Infrastructure.Services
 
             try
             {
-                // Parse the full blob URI
-                Uri uri = new Uri(blobUri);
-                // Extract container name (segment[1] after trimming slashes)
-                string containerName = uri.Segments[1].TrimEnd('/');
-                // Extract blob name (rest of the path after container, trim leading slash)
-                string blobName = string.Join("", uri.Segments.Skip(2)).TrimStart('/');
+                // Split the blobRelativePath into container and blob name
+                // Expects format: "containerName/blobName"
+                string[] segments = blobRelativePath.Split(new char[] { '/' }, 2, StringSplitOptions.RemoveEmptyEntries);
 
+                if (segments.Length < 2)
+                {
+                    _logger.LogError($"Invalid blob relative path format provided for SAS generation: '{blobRelativePath}'. Expected 'containerName/blobName'.");
+                    throw new ArgumentException($"Invalid blob relative path format. Expected 'containerName/blobName'.", nameof(blobRelativePath));
+                }
+
+                string containerName = segments[0];
+                string blobName = segments[1];
+
+                // Get the BlobClient using the identified container and blob name
                 BlobClient blobClient = _blobServiceClient.GetBlobContainerClient(containerName).GetBlobClient(blobName);
 
                 if (!await blobClient.ExistsAsync())
                 {
-                    _logger.LogWarning($"Attempted to generate SAS for non-existent blob: {blobUri}");
-                    throw new FileNotFoundException($"Blob not found: {blobUri}");
+                    _logger.LogWarning($"Attempted to generate SAS for non-existent blob (constructed path): {containerName}/{blobName}");
+                    throw new FileNotFoundException($"Blob not found: {containerName}/{blobName}");
                 }
 
                 BlobSasBuilder sasBuilder = new BlobSasBuilder()
@@ -267,12 +279,12 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 sasBuilder.SetPermissions(BlobSasPermissions.Read);
 
                 Uri sasUri = blobClient.GenerateSasUri(sasBuilder);
-                _logger.LogInformation($"Generated SAS URL for {blobUri}. Expires on: {sasBuilder.ExpiresOn}");
+                _logger.LogInformation($"Generated SAS URL for {containerName}/{blobName}. Expires on: {sasBuilder.ExpiresOn}");
                 return sasUri.ToString();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error generating SAS URL for blob {blobUri}.");
+                _logger.LogError(ex, $"Error generating SAS URL for blob relative path: {blobRelativePath}.");
                 throw;
             }
         }
@@ -282,6 +294,7 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             Uri uri;
             BlobClient blobClient;
 
+            // Attempt to parse as absolute URI first (e.g., if full URI was stored)
             if (Uri.TryCreate(filePath, UriKind.Absolute, out uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
                 string containerName = uri.Segments[1].TrimEnd('/');
@@ -291,13 +304,11 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             }
             else
             {
-                // This case should ideally not happen if StoragePath is always a full URI.
-                // However, if some legacy paths exist as relative, this tries to handle them.
-                _logger.LogWarning($"DeleteFile received a non-absolute URI. Attempting to parse as relative path: {filePath}");
+                // Assume it's a relative path like "containerName/blobName"
                 string[] segments = filePath.Split(new char[] { '/' }, 2, StringSplitOptions.RemoveEmptyEntries);
                 if (segments.Length < 2)
                 {
-                    _logger.LogError($"DeleteFile received an invalid relative path format: {filePath}. Expected 'container/blobname'. Skipping delete.");
+                    _logger.LogWarning($"DeleteFile received an invalid path format: {filePath}. Expected absolute URI or 'container/blobname'. Skipping delete.");
                     return; // Cannot determine blob to delete
                 }
                 string containerName = segments[0];
