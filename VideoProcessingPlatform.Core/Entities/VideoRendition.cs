@@ -44,6 +44,6 @@ namespace VideoProcessingPlatform.Core.Entities
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
 
         // --- Navigation Property ---
-        public TranscodingJob TranscodingJob { get; set; } // The job that produced this rendition
+        public TranscodingJob TranscodingJob { get; set; } = null!; // The job that produced this rendition
     }
 }

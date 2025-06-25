@@ -1,6 +1,7 @@
 ﻿// VideoProcessingPlatform.Core/Entities/UploadMetadata.cs
 using System;
-using System.Collections.Generic;
+using System.Collections.Generic; // Required for ICollection
+using System.ComponentModel.DataAnnotations; // Required for attributes like [Required], [StringLength]
 using System.Linq; // Needed for Contains and other LINQ operations if using list/array
 
 namespace VideoProcessingPlatform.Core.Entities
@@ -16,13 +17,17 @@ namespace VideoProcessingPlatform.Core.Entities
         public Guid UserId { get; set; }
 
         // The original file name provided by the user.
-        public string OriginalFileName { get; set; }
+        [Required] // Ensuring consistency with database mapping
+        [StringLength(255)]
+        public string OriginalFileName { get; set; } = string.Empty; // Initialized to avoid nullable warnings
 
         // The original file size in bytes.
         public long OriginalFileSize { get; set; }
 
         // MIME type of the uploaded file (e.g., "video/mp4").
-        public string MimeType { get; set; }
+        [Required] // Ensuring consistency with database mapping
+        [StringLength(100)] // Adjusted length for MIME types, if needed. Keep 50 if that's current DB.
+        public string MimeType { get; set; } = string.Empty; // Initialized to avoid nullable warnings
 
         // Total number of chunks the original file was divided into.
         public int TotalChunks { get; set; }
@@ -37,13 +42,28 @@ namespace VideoProcessingPlatform.Core.Entities
         public string? OriginalStoragePath { get; set; } // Nullable until merge is complete
 
         // Current status of the upload (e.g., 'InProgress', 'Completed', 'Failed', 'Cancelled').
+        [Required] // Ensuring consistency with database mapping
+        [StringLength(50)]
         public string UploadStatus { get; set; } = "InProgress"; // Default status
 
         // Timestamp when the upload session was initiated.
         public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 
-        // Navigation property for the User who owns this upload.
-        // This will be configured in ApplicationDbContext.
-        public User User { get; set; }
+        // --- NEW: Timestamp when the upload metadata or status was last updated (REQUIRED by ApplicationDbContext) ---
+        public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
+
+        // --- NEW: Stores the URL of the thumbnail selected by the user as the primary for this video (REQUIRED by ApplicationDbContext) ---
+        [StringLength(512)] // Ensure adequate length for URLs
+        public string? SelectedThumbnailUrl { get; set; } // Can be null initially
+
+        // --- Navigation Property for the User who owns this upload (Ensuring it's non-nullable for EF Core) ---
+        public User User { get; set; } = null!; // Initialized to null! to indicate it will be populated by EF Core
+
+        // --- NEW: Navigation collection for related transcoding jobs (REQUIRED by ApplicationDbContext) ---
+        public ICollection<TranscodingJob> TranscodingJobs { get; set; } = new List<TranscodingJob>();
+
+        // --- NEW: Navigation collection for generated thumbnails (for this video) (REQUIRED if Thumbnail entity is used) ---
+        // Uncomment this if you have or plan to add the Thumbnail entity.
+        // public ICollection<Thumbnail> Thumbnails { get; set; } = new List<Thumbnail>();
     }
 }

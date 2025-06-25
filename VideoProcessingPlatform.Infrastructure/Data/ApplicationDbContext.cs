@@ -13,13 +13,13 @@ namespace VideoProcessingPlatform.Infrastructure.Data
         {
         }
 
-        // Define your DbSet properties for each entity that maps to a database table
-        public DbSet<User> Users { get; set; }
-        public DbSet<UploadMetadata> UploadMetadata { get; set; }
-        public DbSet<EncodingProfile> EncodingProfiles { get; set; }
-        // New DbSets for transcoding jobs and renditions
-        public DbSet<TranscodingJob> TranscodingJobs { get; set; }
-        public DbSet<VideoRendition> VideoRenditions { get; set; }
+        public DbSet<User> Users { get; set; } = default!;
+        public DbSet<UploadMetadata> UploadMetadata { get; set; } = default!;
+        public DbSet<EncodingProfile> EncodingProfiles { get; set; } = default!;
+        public DbSet<TranscodingJob> TranscodingJobs { get; set; } = default!;
+        public DbSet<VideoRendition> VideoRenditions { get; set; } = default!;
+        // If you are using the Thumbnail entity, uncomment this line:
+        // public DbSet<Thumbnail> Thumbnails { get; set; } = default!;
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,6 +31,21 @@ namespace VideoProcessingPlatform.Infrastructure.Data
             {
                 entity.HasIndex(u => u.Username).IsUnique();
                 entity.HasIndex(u => u.Email).IsUnique();
+                entity.Property(u => u.Username).IsRequired().HasMaxLength(50);
+                entity.Property(u => u.Email).IsRequired().HasMaxLength(255);
+                entity.Property(u => u.PasswordHash).IsRequired().HasMaxLength(255);
+                entity.Property(u => u.Role).IsRequired().HasMaxLength(50);
+                entity.Property(u => u.CreatedAt).IsRequired();
+
+                entity.HasMany(u => u.UploadMetadata)
+                      .WithOne(um => um.User)
+                      .HasForeignKey(um => um.UserId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasMany(u => u.TranscodingJobs)
+                      .WithOne(tj => tj.User)
+                      .HasForeignKey(tj => tj.UserId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             // Configure UploadMetadata entity
@@ -39,7 +54,7 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.HasKey(um => um.Id);
                 entity.Property(um => um.OriginalFileName).IsRequired().HasMaxLength(255);
                 entity.Property(um => um.OriginalFileSize).IsRequired();
-                entity.Property(um => um.MimeType).IsRequired().HasMaxLength(50);
+                entity.Property(um => um.MimeType).IsRequired().HasMaxLength(100);
                 entity.Property(um => um.TotalChunks).IsRequired();
                 entity.Property(um => um.CompletedChunks)
                       .IsRequired()
@@ -47,11 +62,23 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(um => um.OriginalStoragePath).HasMaxLength(512);
                 entity.Property(um => um.UploadStatus).IsRequired().HasMaxLength(50);
                 entity.Property(um => um.UploadedAt).IsRequired();
+                entity.Property(um => um.LastUpdatedAt).IsRequired(); // Property now in UploadMetadata.cs
+                entity.Property(um => um.SelectedThumbnailUrl).HasMaxLength(512); // Property now in UploadMetadata.cs
 
                 entity.HasOne(um => um.User)
-                      .WithMany()
+                      .WithMany(u => u.UploadMetadata)
                       .HasForeignKey(um => um.UserId)
                       .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasMany(um => um.TranscodingJobs)
+                      .WithOne(tj => tj.UploadMetadata)
+                      .HasForeignKey(tj => tj.UploadMetadataId)
+                      .OnDelete(DeleteBehavior.Restrict);
+                // If Thumbnail entity exists and UploadMetadata.cs has ICollection<Thumbnail>, uncomment this:
+                // entity.HasMany(um => um.Thumbnails)
+                //       .WithOne(t => t.UploadMetadata)
+                //       .HasForeignKey(t => t.UploadMetadataId)
+                //       .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Configure EncodingProfile entity
@@ -60,7 +87,6 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.HasKey(ep => ep.Id);
                 entity.Property(ep => ep.ProfileName).IsRequired().HasMaxLength(255);
                 entity.HasIndex(ep => ep.ProfileName).IsUnique();
-
                 entity.Property(ep => ep.Description).HasMaxLength(1000);
                 entity.Property(ep => ep.Resolution).IsRequired().HasMaxLength(50);
                 entity.Property(ep => ep.BitrateKbps).IsRequired();
@@ -69,6 +95,12 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(ep => ep.IsActive).IsRequired();
                 entity.Property(ep => ep.CreatedAt).IsRequired();
                 entity.Property(ep => ep.LastModifiedAt).IsRequired();
+                entity.Property(ep => ep.ApplyDRM).IsRequired(); // Property now in EncodingProfile.cs
+
+                entity.HasMany(ep => ep.TranscodingJobs)
+                      .WithOne(tj => tj.EncodingProfile)
+                      .HasForeignKey(tj => tj.EncodingProfileId)
+                      .OnDelete(DeleteBehavior.Restrict);
             });
 
             // Configure TranscodingJob entity
@@ -78,28 +110,35 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(tj => tj.SourceStoragePath).IsRequired().HasMaxLength(512);
                 entity.Property(tj => tj.Status).IsRequired().HasMaxLength(50);
                 entity.Property(tj => tj.Progress).IsRequired();
-                entity.Property(tj => tj.StatusMessage).HasMaxLength(1000); // Optional
+                entity.Property(tj => tj.StatusMessage).HasMaxLength(1000);
                 entity.Property(tj => tj.CreatedAt).IsRequired();
                 entity.Property(tj => tj.LastUpdatedAt).IsRequired();
+                entity.Property(tj => tj.EncodingProfileName).IsRequired().HasMaxLength(255); // Property now in TranscodingJob.cs
+                entity.Property(tj => tj.TargetResolution).IsRequired().HasMaxLength(50); // Property now in TranscodingJob.cs
+                entity.Property(tj => tj.TargetBitrateKbps).IsRequired(); // Property now in TranscodingJob.cs
+                entity.Property(tj => tj.TargetFormat).IsRequired().HasMaxLength(50); // Property now in TranscodingJob.cs
+                entity.Property(tj => tj.FFmpegArgsTemplate).IsRequired().HasMaxLength(4000); // Property now in TranscodingJob.cs
+                entity.Property(tj => tj.ApplyDRM).IsRequired(); // Property now in TranscodingJob.cs
 
-                // Relationships based on ERD:
-                // TranscodingJob --> UploadMetadata (many-to-one)
                 entity.HasOne(tj => tj.UploadMetadata)
-                      .WithMany() // Assuming UploadMetadata doesn't explicitly need a collection of jobs
+                      .WithMany(um => um.TranscodingJobs)
                       .HasForeignKey(tj => tj.UploadMetadataId)
-                      .OnDelete(DeleteBehavior.Restrict); // Prevent deleting UploadMetadata if jobs exist
+                      .OnDelete(DeleteBehavior.Restrict);
 
-                // TranscodingJob --> User (many-to-one)
                 entity.HasOne(tj => tj.User)
-                      .WithMany() // Assuming User doesn't explicitly need a collection of jobs
+                      .WithMany(u => u.TranscodingJobs)
                       .HasForeignKey(tj => tj.UserId)
-                      .OnDelete(DeleteBehavior.Restrict); // Prevent deleting User if jobs exist
+                      .OnDelete(DeleteBehavior.Restrict);
 
-                // TranscodingJob --> EncodingProfile (many-to-one)
                 entity.HasOne(tj => tj.EncodingProfile)
-                      .WithMany() // Assuming EncodingProfile doesn't explicitly need a collection of jobs
+                      .WithMany(ep => ep.TranscodingJobs)
                       .HasForeignKey(tj => tj.EncodingProfileId)
-                      .OnDelete(DeleteBehavior.Restrict); // Prevent deleting Profile if jobs exist
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasMany(tj => tj.VideoRenditions)
+                      .WithOne(vr => vr.TranscodingJob)
+                      .HasForeignKey(vr => vr.TranscodingJobId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
 
             // Configure VideoRendition entity
@@ -109,14 +148,10 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(vr => vr.RenditionType).IsRequired().HasMaxLength(100);
                 entity.Property(vr => vr.StoragePath).IsRequired().HasMaxLength(512);
                 entity.Property(vr => vr.IsEncrypted).IsRequired();
-                entity.Property(vr => vr.PlaybackUrl).HasMaxLength(512); // Nullable
+                entity.Property(vr => vr.PlaybackUrl).HasMaxLength(1024); // Increased length
                 entity.Property(vr => vr.GeneratedAt).IsRequired();
-
-                // Relationship: VideoRendition --> TranscodingJob (many-to-one)
-                entity.HasOne(vr => vr.TranscodingJob)
-                      .WithMany(tj => tj.VideoRenditions) // TranscodingJob has a collection of VideoRenditions
-                      .HasForeignKey(vr => vr.TranscodingJobId)
-                      .OnDelete(DeleteBehavior.Cascade); // If job is deleted, renditions are deleted
+                entity.Property(vr => vr.Resolution).IsRequired().HasMaxLength(50); // Property now in VideoRendition.cs
+                entity.Property(vr => vr.BitrateKbps).IsRequired(); // Property now in VideoRendition.cs
             });
 
 

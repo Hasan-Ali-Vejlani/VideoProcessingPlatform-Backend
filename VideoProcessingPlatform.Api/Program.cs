@@ -13,6 +13,8 @@ using System.Text; // For Encoding
 using Microsoft.OpenApi.Models; // For Swagger UI security definitions
 using System; // For InvalidOperationException
 using System.Reflection; // Required for Assembly.GetExecutingAssembly().GetName().Name
+using Microsoft.Extensions.DependencyInjection; // For AddTransient etc. (explicitly added for clarity)
+using Microsoft.Extensions.Logging; // For logging
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,14 +26,11 @@ builder.Services.AddControllers();
 // 2. Configure Database Context (Entity Framework Core)
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    // Option A: Use SQL Server LocalDB (most common for dev, typically installed with VS)
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
         sqlServerOptionsAction: sqlOptions =>
         {
             sqlOptions.MigrationsAssembly(Assembly.GetExecutingAssembly().GetName().Name);
         });
-    // Option B: Use an in-memory database for testing (good for quick local tests, but data is not persistent)
-    // options.UseInMemoryDatabase("VppDbInMemory");
 });
 
 // 3. Register your services and repositories for Dependency Injection
@@ -42,7 +41,13 @@ builder.Services.AddScoped<IAuthService, AuthService>(); // Your AuthService in 
 
 // --- Upload Related Services and Repositories ---
 builder.Services.AddScoped<IUploadMetadataRepository, UploadMetadataRepository>();
-builder.Services.AddSingleton<IFileStorageService, AzureBlobStorageService>();
+// FIX: Change IFileStorageService to use DI properly by injecting IConfiguration and ILogger
+builder.Services.AddSingleton<IFileStorageService>(provider =>
+    new AzureBlobStorageService(
+        provider.GetRequiredService<IConfiguration>(),
+        provider.GetRequiredService<ILogger<AzureBlobStorageService>>() // Inject ILogger
+    )
+);
 builder.Services.AddScoped<IUploadService, UploadService>();
 
 // --- Encoding Profile Related Services and Repositories ---
@@ -50,15 +55,22 @@ builder.Services.AddScoped<IEncodingProfileRepository, EncodingProfileRepository
 builder.Services.AddScoped<IFFmpegCommandBuilder, FFmpegCommandBuilder>();
 builder.Services.AddScoped<IEncodingProfileService, EncodingProfileService>();
 
-// --- New: Transcoding Job and Message Queue Related Services ---
+// --- Transcoding Job and Message Queue Related Services ---
 builder.Services.AddScoped<ITranscodingJobRepository, TranscodingJobRepository>();
+// Assuming AzureServiceBusMessageQueueService constructor takes IConfiguration and ILogger
 builder.Services.AddSingleton<IMessageQueueService, AzureServiceBusMessageQueueService>();
 builder.Services.AddScoped<IVideoProcessingService, VideoProcessingService>();
-// --- End New Transcoding Job and Message Queue Related Services ---
 
 // --- Playback Related Services ---
 builder.Services.AddTransient<IVideoPlaybackService, VideoPlaybackService>();
-builder.Services.AddTransient<ICDNService, CDNService>();
+// FIX: Change CDNService registration to use DI properly by injecting IConfiguration, IFileStorageService and ILogger
+builder.Services.AddTransient<ICDNService>(provider =>
+    new CDNService(
+        provider.GetRequiredService<IConfiguration>(),
+        provider.GetRequiredService<IFileStorageService>(), // Inject IFileStorageService
+        provider.GetRequiredService<ILogger<CDNService>>() // Inject ILogger
+    )
+);
 
 
 // 4. Configure JWT Authentication
@@ -74,15 +86,13 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT:Key not found.")))
         };
     });
 
 builder.Services.AddAuthorization(options =>
 {
-    // Example policy: require Admin role for specific actions
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    // Example policy: require any authenticated user
     options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
 });
 
@@ -99,7 +109,6 @@ builder.Services.AddCors(options =>
         });
 });
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
