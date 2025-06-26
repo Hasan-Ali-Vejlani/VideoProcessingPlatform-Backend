@@ -46,6 +46,7 @@ namespace VideoProcessingPlatform.Worker.Services
                     var videoProcessingService = scope.ServiceProvider.GetRequiredService<IVideoProcessingService>();
                     var fileStorageService = scope.ServiceProvider.GetRequiredService<IFileStorageService>();
                     var thumbnailService = scope.ServiceProvider.GetRequiredService<IThumbnailService>();
+                    var thumbnailRepository = scope.ServiceProvider.GetRequiredService<IThumbnailRepository>();
 
                     QueuedMessage<TranscodingJobMessage>? queuedMessage = null;
                     TranscodingJobMessage? jobMessage = null;
@@ -213,43 +214,91 @@ namespace VideoProcessingPlatform.Worker.Services
                                     _logger.LogInformation($"Generating thumbnails for video ID: {jobMessage.UploadMetadataId} (Job ID: {jobMessage.TranscodingJobId})");
 
                                     // --- FIX: Pass stoppingToken to GetVideoDurationAsync ---
-                                    double videoDurationSeconds = await GetVideoDurationAsync(localInputPath, stoppingToken);
-                                    _logger.LogInformation($"Detected video duration: {videoDurationSeconds} seconds for {localInputPath}.");
+                                    //double videoDurationSeconds = await GetVideoDurationAsync(localInputPath, stoppingToken);
+                                    //_logger.LogInformation($"Detected video duration: {videoDurationSeconds} seconds for {localInputPath}.");
 
-                                    if (videoDurationSeconds > 0)
+                                    //if (videoDurationSeconds > 0)
+                                    //{
+                                    //    int numberOfThumbnails = 5;
+                                    //    for (int i = 0; i < numberOfThumbnails; i++)
+                                    //    {
+                                    //        double timestamp = videoDurationSeconds * (0.1 + i * 0.2);
+                                    //        int timestampSeconds = (int)Math.Round(timestamp);
+
+                                    //        // Clamp
+                                    //        if (timestampSeconds >= (int)Math.Floor(videoDurationSeconds))
+                                    //        {
+                                    //            timestampSeconds = Math.Max(0, (int)Math.Floor(videoDurationSeconds) - 1);
+                                    //        }
+
+                                    //        _logger.LogInformation($"Generating thumbnail {i} at {timestampSeconds}s (video duration: {videoDurationSeconds})");
+
+                                    //        byte[] thumbnailData = await GenerateThumbnailAsync(localInputPath, timestampSeconds, stoppingToken);
+
+                                    //        if (thumbnailData != null && thumbnailData.Length > 0)
+                                    //        {
+                                    //            string thumbnailStoragePath = await fileStorageService.StoreThumbnail(jobMessage.UploadMetadataId, thumbnailData, i);
+                                    //            bool isDefault = (i == 0);
+                                    //            await thumbnailService.AddThumbnailMetadataAsync(jobMessage.UploadMetadataId, thumbnailStoragePath, timestampSeconds, i, isDefault);
+                                    //            _logger.LogInformation($"Generated and stored thumbnail {i} for video {jobMessage.UploadMetadataId} at {timestampSeconds}s.");
+                                    //        }
+                                    //        else
+                                    //        {
+                                    //            _logger.LogWarning($"Failed to generate thumbnail {i} for video {jobMessage.UploadMetadataId} at {timestampSeconds}s. Thumbnail data was empty.");
+                                    //        }
+                                    //    }
+                                    //}
+                                    //else
+                                    //{
+                                    //    _logger.LogWarning($"Video duration could not be determined or was zero for {localInputPath}. Skipping thumbnail generation.");
+                                    //}
+
+                                    bool thumbnailsExist = await thumbnailRepository.ThumbnailsExistForVideoAsync(jobMessage.UploadMetadataId);
+                                    if (thumbnailsExist)
                                     {
-                                        int numberOfThumbnails = 5;
-                                        for (int i = 0; i < numberOfThumbnails; i++)
-                                        {
-                                            double timestamp = videoDurationSeconds * (0.1 + i * 0.2);
-                                            int timestampSeconds = (int)Math.Round(timestamp);
-
-                                            // Clamp
-                                            if (timestampSeconds >= (int)Math.Floor(videoDurationSeconds))
-                                            {
-                                                timestampSeconds = Math.Max(0, (int)Math.Floor(videoDurationSeconds) - 1);
-                                            }
-
-                                            _logger.LogInformation($"Generating thumbnail {i} at {timestampSeconds}s (video duration: {videoDurationSeconds})");
-
-                                            byte[] thumbnailData = await GenerateThumbnailAsync(localInputPath, timestampSeconds, stoppingToken);
-
-                                            if (thumbnailData != null && thumbnailData.Length > 0)
-                                            {
-                                                string thumbnailStoragePath = await fileStorageService.StoreThumbnail(jobMessage.UploadMetadataId, thumbnailData, i);
-                                                bool isDefault = (i == 0);
-                                                await thumbnailService.AddThumbnailMetadataAsync(jobMessage.UploadMetadataId, thumbnailStoragePath, timestampSeconds, i, isDefault);
-                                                _logger.LogInformation($"Generated and stored thumbnail {i} for video {jobMessage.UploadMetadataId} at {timestampSeconds}s.");
-                                            }
-                                            else
-                                            {
-                                                _logger.LogWarning($"Failed to generate thumbnail {i} for video {jobMessage.UploadMetadataId} at {timestampSeconds}s. Thumbnail data was empty.");
-                                            }
-                                        }
+                                        _logger.LogInformation($"Thumbnails already exist for video ID {jobMessage.UploadMetadataId}. Skipping thumbnail generation.");
                                     }
                                     else
                                     {
-                                        _logger.LogWarning($"Video duration could not be determined or was zero for {localInputPath}. Skipping thumbnail generation.");
+                                        _logger.LogInformation($"Generating thumbnails for video ID: {jobMessage.UploadMetadataId} (Job ID: {jobMessage.TranscodingJobId})");
+
+                                        double videoDurationSeconds = await GetVideoDurationAsync(localInputPath, stoppingToken);
+                                        _logger.LogInformation($"Detected video duration: {videoDurationSeconds} seconds for {localInputPath}.");
+
+                                        if (videoDurationSeconds > 0)
+                                        {
+                                            int numberOfThumbnails = 5;
+                                            for (int i = 0; i < numberOfThumbnails; i++)
+                                            {
+                                                double timestamp = videoDurationSeconds * (0.1 + i * 0.2);
+                                                int timestampSeconds = (int)Math.Round(timestamp);
+
+                                                if (timestampSeconds >= (int)Math.Floor(videoDurationSeconds))
+                                                {
+                                                    timestampSeconds = Math.Max(0, (int)Math.Floor(videoDurationSeconds) - 1);
+                                                }
+
+                                                _logger.LogInformation($"Generating thumbnail {i} at {timestampSeconds}s (video duration: {videoDurationSeconds})");
+
+                                                byte[] thumbnailData = await GenerateThumbnailAsync(localInputPath, timestampSeconds, stoppingToken);
+
+                                                if (thumbnailData != null && thumbnailData.Length > 0)
+                                                {
+                                                    string thumbnailStoragePath = await fileStorageService.StoreThumbnail(jobMessage.UploadMetadataId, thumbnailData, i);
+                                                    bool isDefault = (i == 0);
+                                                    await thumbnailService.AddThumbnailMetadataAsync(jobMessage.UploadMetadataId, thumbnailStoragePath, timestampSeconds, i, isDefault);
+                                                    _logger.LogInformation($"Generated and stored thumbnail {i} for video {jobMessage.UploadMetadataId} at {timestampSeconds}s.");
+                                                }
+                                                else
+                                                {
+                                                    _logger.LogWarning($"Failed to generate thumbnail {i} for video {jobMessage.UploadMetadataId} at {timestampSeconds}s. Thumbnail data was empty.");
+                                                }
+                                            }
+                                        }
+                                        else
+                                        {
+                                            _logger.LogWarning($"Video duration could not be determined or was zero for {localInputPath}. Skipping thumbnail generation.");
+                                        }
                                     }
 
                                     await videoProcessingService.CompleteTranscodingJob(jobMessage.TranscodingJobId, renditions);

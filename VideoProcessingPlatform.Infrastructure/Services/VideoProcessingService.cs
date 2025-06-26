@@ -210,7 +210,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         // --- Implement GetVideoDetailsAsync for frontend display ---
         public async Task<VideoDetailsDto?> GetVideoDetailsAsync(Guid videoId, Guid userId)
         {
-            // --- FIX: Call GetByIdWithThumbnails from IUploadMetadataRepository ---
             var uploadMetadata = await _uploadRepository.GetByIdWithThumbnails(videoId);
             if (uploadMetadata == null || uploadMetadata.UserId != userId)
             {
@@ -218,8 +217,31 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 return null;
             }
 
-            // --- FIX: Call GetLatestJobForVideo from ITranscodingJobRepository ---
             var latestJob = await _jobRepository.GetLatestJobForVideo(videoId);
+
+            // Generate signed URLs for thumbnails
+            var thumbnailsWithSignedUrls = await Task.WhenAll(
+            uploadMetadata.Thumbnails
+                .OrderBy(t => t.Order)
+                .Select(async t =>
+                {
+                    var dto = t.ToDto();
+                    var blobPath = ExtractBlobPath(t.StoragePath);
+                    dto.SignedUrl = await _fileStorageService.GenerateBlobSasUrl(blobPath, TimeSpan.FromHours(1));
+                    return dto;
+                })
+             );
+
+            var selectedThumbnailEntity = uploadMetadata.Thumbnails.FirstOrDefault(t => t.IsDefault)
+                                       ?? uploadMetadata.Thumbnails.FirstOrDefault();
+
+            ThumbnailDto? selectedThumbnailDto = null;
+            if (selectedThumbnailEntity != null)
+            {
+                selectedThumbnailDto = selectedThumbnailEntity.ToDto();
+                var selectedBlobPath = ExtractBlobPath(selectedThumbnailEntity.StoragePath);
+                selectedThumbnailDto.SignedUrl = await _fileStorageService.GenerateBlobSasUrl(selectedBlobPath, TimeSpan.FromHours(1));
+            }
 
             var videoDetailsDto = new VideoDetailsDto
             {
@@ -232,19 +254,13 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 UploadedAt = uploadMetadata.UploadedAt,
                 LastUpdatedAt = uploadMetadata.LastUpdatedAt,
 
-                SelectedThumbnail = uploadMetadata.Thumbnails
-                                    .FirstOrDefault(t => t.IsDefault)?
-                                    .ToDto() ?? uploadMetadata.Thumbnails.FirstOrDefault()?.ToDto(),
-
-                AllThumbnails = uploadMetadata.Thumbnails
-                                .OrderBy(t => t.Order)
-                                .Select(t => t.ToDto())
-                                .ToList(),
+                SelectedThumbnail = selectedThumbnailDto,
+                AllThumbnails = thumbnailsWithSignedUrls.ToList(),
 
                 AvailableRenditions = latestJob?.VideoRenditions
-                                        .OrderByDescending(vr => vr.BitrateKbps)
-                                        .Select(vr => vr.ToDto())
-                                        .ToList() ?? new List<VideoRenditionDto>(),
+                    .OrderByDescending(vr => vr.BitrateKbps)
+                    .Select(vr => vr.ToDto())
+                    .ToList() ?? new List<VideoRenditionDto>(),
 
                 LatestTranscodingJob = latestJob != null ? MapToDto(latestJob) : null
             };
@@ -256,6 +272,13 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         public async Task<IEnumerable<ThumbnailDto>> GetAllThumbnailsForVideoAsync(Guid videoId)
         {
             var thumbnails = await _thumbnailService.GetThumbnailsForVideoAsync(videoId);
+
+            foreach (var thumbnail in thumbnails)
+            {
+                var blobPath = ExtractBlobPath(thumbnail.StoragePath);
+                thumbnail.SignedUrl = await _fileStorageService.GenerateBlobSasUrl(blobPath, TimeSpan.FromHours(1));
+            }
+
             return thumbnails;
         }
 
@@ -294,6 +317,17 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 }).ToList() ?? new List<VideoRenditionDto>()
             };
         }
+        private string ExtractBlobPath(string fullUrl)
+        {
+            var uri = new Uri(fullUrl);
+            return uri.AbsolutePath.TrimStart('/'); // removes the leading '/'
+        }
+
+        public async Task<bool> ThumbnailsExistForVideoAsync(Guid videoId)
+        {
+            var thumbnails = await _thumbnailService.GetThumbnailsForVideoAsync(videoId);
+            return thumbnails.Any();
+        }
+
     }
-    // --- REMOVED: EntityToDtoExtensions nested class. It's now in its own file. ---
 }

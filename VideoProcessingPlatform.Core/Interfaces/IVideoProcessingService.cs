@@ -39,5 +39,7 @@ namespace VideoProcessingPlatform.Core.Interfaces
 
         // Sets a specific thumbnail as the default for a video.
         Task<SetSelectedThumbnailResponseDto> SetDefaultThumbnailAsync(Guid videoId, Guid thumbnailId);
+
+        Task<bool> ThumbnailsExistForVideoAsync(Guid videoId);
     }
 }

@@ -18,6 +18,20 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         private readonly IThumbnailRepository _thumbnailRepository;
         private readonly IUploadMetadataRepository _uploadMetadataRepository;
         private readonly ILogger<ThumbnailService> _logger;
+        private readonly IFileStorageService _fileStorageService;
+
+        public ThumbnailService(
+            IThumbnailRepository thumbnailRepository,
+            IUploadMetadataRepository uploadMetadataRepository,
+            IFileStorageService fileStorageService,
+            ILogger<ThumbnailService> logger)
+        {
+            _thumbnailRepository = thumbnailRepository;
+            _uploadMetadataRepository = uploadMetadataRepository;
+            _fileStorageService = fileStorageService;
+            _logger = logger;
+        }
+
 
         public ThumbnailService(
             IThumbnailRepository thumbnailRepository,
@@ -58,13 +72,45 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         public async Task<IEnumerable<ThumbnailDto>> GetThumbnailsForVideoAsync(Guid videoId)
         {
             var thumbnails = await _thumbnailRepository.GetByVideoIdAsync(videoId);
-            return thumbnails.Select(t => t.ToDto()).ToList();
+
+            var result = new List<ThumbnailDto>();
+            foreach (var t in thumbnails)
+            {
+                var dto = t.ToDto();
+
+                try
+                {
+                    var relativePath = GetRelativeBlobPathFromUri(dto.StoragePath); // helper below
+                    dto.StoragePath = await _fileStorageService.GenerateBlobSasUrl(relativePath, TimeSpan.FromMinutes(30));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Failed to generate SAS URL for thumbnail {t.Id}.");
+                }
+
+                result.Add(dto);
+            }
+
+            return result;
         }
 
         public async Task<ThumbnailDto?> GetDefaultThumbnailForVideoAsync(Guid videoId)
         {
             var thumbnail = await _thumbnailRepository.GetDefaultThumbnailByVideoIdAsync(videoId);
-            return thumbnail?.ToDto();
+            if (thumbnail == null) return null;
+
+            var dto = thumbnail.ToDto();
+            try
+            {
+                var relativePath = GetRelativeBlobPathFromUri(dto.StoragePath);
+                dto.StoragePath = await _fileStorageService.GenerateBlobSasUrl(relativePath, TimeSpan.FromMinutes(30));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to generate SAS URL for default thumbnail {thumbnail.Id}.");
+            }
+
+            return dto;
         }
 
         public async Task<SetSelectedThumbnailResponseDto> SetDefaultThumbnailAsync(Guid videoId, Guid thumbnailId)
@@ -113,6 +159,14 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             }
 
             return response;
+        }
+
+        private string GetRelativeBlobPathFromUri(string fullUri)
+        {
+            var uri = new Uri(fullUri);
+            string container = uri.Segments[1].TrimEnd('/');
+            string blob = string.Join("", uri.Segments.Skip(2));
+            return $"{container}/{blob}";
         }
     }
 }

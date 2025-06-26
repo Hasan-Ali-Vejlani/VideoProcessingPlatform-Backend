@@ -27,5 +27,7 @@ namespace VideoProcessingPlatform.Core.Interfaces
         // Updates the IsDefault status for thumbnails of a specific video.
         // Sets the specified thumbnail as default and all others for that video as non-default.
         Task SetDefaultThumbnailAsync(Guid videoId, Guid thumbnailId);
+
+        Task<bool> ThumbnailsExistForVideoAsync(Guid videoId);
     }
 }

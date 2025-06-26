@@ -94,5 +94,11 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
                 }
             }
         }
+
+        public async Task<bool> ThumbnailsExistForVideoAsync(Guid videoId)
+        {
+            return await _context.Thumbnails
+                                 .AnyAsync(t => t.UploadMetadataId == videoId);
+        }
     }
 }

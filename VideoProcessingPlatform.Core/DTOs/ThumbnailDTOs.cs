@@ -13,6 +13,7 @@ namespace VideoProcessingPlatform.Core.DTOs
         public int TimestampSeconds { get; set; } // Timestamp in video where thumbnail was captured
         public int Order { get; set; } // Order for display
         public bool IsDefault { get; set; } // Indicates if this is the currently selected default thumbnail
+        public string? SignedUrl { get; set; }
     }
 
     // DTO for requesting to set a specific thumbnail as the default for a video.
