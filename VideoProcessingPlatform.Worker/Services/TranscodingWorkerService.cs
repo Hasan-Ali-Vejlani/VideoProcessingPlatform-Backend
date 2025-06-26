@@ -224,8 +224,16 @@ namespace VideoProcessingPlatform.Worker.Services
                                             double timestamp = videoDurationSeconds * (0.1 + i * 0.2);
                                             int timestampSeconds = (int)Math.Round(timestamp);
 
-                                            // --- FIX: Pass stoppingToken to GenerateThumbnailAsync ---
+                                            // Clamp
+                                            if (timestampSeconds >= (int)Math.Floor(videoDurationSeconds))
+                                            {
+                                                timestampSeconds = Math.Max(0, (int)Math.Floor(videoDurationSeconds) - 1);
+                                            }
+
+                                            _logger.LogInformation($"Generating thumbnail {i} at {timestampSeconds}s (video duration: {videoDurationSeconds})");
+
                                             byte[] thumbnailData = await GenerateThumbnailAsync(localInputPath, timestampSeconds, stoppingToken);
+
                                             if (thumbnailData != null && thumbnailData.Length > 0)
                                             {
                                                 string thumbnailStoragePath = await fileStorageService.StoreThumbnail(jobMessage.UploadMetadataId, thumbnailData, i);
@@ -357,13 +365,15 @@ namespace VideoProcessingPlatform.Worker.Services
         // --- FIX: Added CancellationToken parameter ---
         private async Task<byte[]> GenerateThumbnailAsync(string videoFilePath, int timestampSeconds, CancellationToken cancellationToken)
         {
-            string ffmpegArgs = $"-i \"{videoFilePath}\" -ss {timestampSeconds} -vframes 1 -f image2 -c:v mjpeg -q:v 2 -s 320x180 -f image2pipe pipe:1";
+            string tempThumbnailPath = Path.Combine(Path.GetTempPath(), $"thumb_{Guid.NewGuid():N}.jpg");
+
+            string ffmpegArgs = $"-ss {timestampSeconds} -i \"{videoFilePath}\" -vframes 1 -q:v 2 -s 320x180 \"{tempThumbnailPath}\"";
 
             var processInfo = new ProcessStartInfo(_ffmpegPath, ffmpegArgs)
             {
                 CreateNoWindow = true,
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
+                RedirectStandardOutput = false,
                 RedirectStandardError = true
             };
 
@@ -372,28 +382,27 @@ namespace VideoProcessingPlatform.Worker.Services
                 using (var process = new Process { StartInfo = processInfo })
                 {
                     process.Start();
+                    string errorOutput = await process.StandardError.ReadToEndAsync(); // get error logs
+                    await process.WaitForExitAsync(cancellationToken);
 
-                    using (var memoryStream = new MemoryStream())
+                    if (process.ExitCode == 0 && File.Exists(tempThumbnailPath))
                     {
-                        await process.StandardOutput.BaseStream.CopyToAsync(memoryStream, cancellationToken); // Pass cancellationToken
-                        await process.WaitForExitAsync(cancellationToken); // Pass cancellationToken
-
-                        if (process.ExitCode == 0)
-                        {
-                            return memoryStream.ToArray();
-                        }
-                        else
-                        {
-                            string error = await process.StandardError.ReadToEndAsync(); // Cancellation token not always directly supported here
-                            _logger.LogError($"FFmpeg thumbnail generation failed (exit code {process.ExitCode}) for {videoFilePath} at {timestampSeconds}s. Error: {error}");
-                            return Array.Empty<byte>();
-                        }
+                        byte[] bytes = await File.ReadAllBytesAsync(tempThumbnailPath, cancellationToken);
+                        File.Delete(tempThumbnailPath); // clean up
+                        return bytes;
+                    }
+                    else
+                    {
+                        _logger.LogError($"FFmpeg thumbnail generation failed (exit code {process.ExitCode}) at {timestampSeconds}s. Error: {errorOutput}");
+                        if (File.Exists(tempThumbnailPath))
+                            File.Delete(tempThumbnailPath); // clean up
+                        return Array.Empty<byte>();
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Exception during thumbnail generation for {videoFilePath} at {timestampSeconds}s.");
+                _logger.LogError(ex, $"Exception during thumbnail generation at {timestampSeconds}s.");
                 return Array.Empty<byte>();
             }
         }

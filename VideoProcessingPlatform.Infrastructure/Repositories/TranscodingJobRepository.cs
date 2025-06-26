@@ -29,13 +29,38 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
         }
 
         // Updates an existing transcoding job in the database.
-        public async Task<bool> Update(TranscodingJob job)
+        public async Task<bool> Update(TranscodingJob updatedJob)
         {
-            // Attach the entity if it's not already tracked, then mark as modified
-            _dbContext.Entry(job).State = EntityState.Modified;
-            // If job.VideoRenditions is loaded and contains entities, they might also be marked.
-            // If only job properties are intended to be updated, consider fetching the entity first,
-            // updating its properties, and then saving changes. For now, this is assumed to be fine.
+            var existingJob = await _dbContext.TranscodingJobs
+                .Include(j => j.VideoRenditions)
+                .FirstOrDefaultAsync(j => j.Id == updatedJob.Id);
+
+            if (existingJob == null)
+                return false;
+
+            // Update scalar fields
+            existingJob.Status = updatedJob.Status;
+            existingJob.Progress = updatedJob.Progress;
+            existingJob.StatusMessage = updatedJob.StatusMessage;
+            existingJob.LastUpdatedAt = updatedJob.LastUpdatedAt;
+
+            // Remove old renditions (tracked separately from navigation collection)
+            if (existingJob.VideoRenditions.Any())
+            {
+                var oldRenditions = existingJob.VideoRenditions.ToList();
+                _dbContext.VideoRenditions.RemoveRange(oldRenditions);
+            }
+
+            // Add new renditions directly to context
+            if (updatedJob.VideoRenditions != null && updatedJob.VideoRenditions.Any())
+            {
+                foreach (var newRendition in updatedJob.VideoRenditions)
+                {
+                    newRendition.TranscodingJobId = updatedJob.Id;
+                    _dbContext.VideoRenditions.Add(newRendition);
+                }
+            }
+
             return await _dbContext.SaveChangesAsync() > 0;
         }
 
