@@ -10,7 +10,6 @@ namespace VideoProcessingPlatform.Core.Interfaces
     {
         public T Content { get; }
         // This will hold the ServiceBusReceivedMessage directly for Azure Service Bus.
-        // It's `object` to keep the abstraction generic across different queue types.
         public object RawMessageHandle { get; }
 
         public QueuedMessage(T content, object rawMessageHandle)

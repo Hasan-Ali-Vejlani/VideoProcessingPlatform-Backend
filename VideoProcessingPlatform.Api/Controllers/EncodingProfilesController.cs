@@ -21,10 +21,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             _encodingProfileService = encodingProfileService;
         }
 
-        /// <summary>
-        /// Retrieves all encoding profiles (active and inactive). Admin only.
-        /// </summary>
-        /// <returns>A list of all encoding profiles.</returns>
         [HttpGet] // GET /api/admin/encodingprofiles
         public async Task<ActionResult<IEnumerable<EncodingProfileDto>>> GetAllEncodingProfiles()
         {
@@ -39,11 +35,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Retrieves a single encoding profile by ID. Admin only.
-        /// </summary>
-        /// <param name="id">The ID of the encoding profile.</param>
-        /// <returns>The encoding profile details.</returns>
         [HttpGet("{id}")] // GET /api/admin/encodingprofiles/{id}
         public async Task<ActionResult<EncodingProfileDto>> GetEncodingProfileById(Guid id)
         {
@@ -62,11 +53,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Creates a new encoding profile. Admin only.
-        /// </summary>
-        /// <param name="request">The data for the new encoding profile.</param>
-        /// <returns>The created encoding profile.</returns>
         [HttpPost] // POST /api/admin/encodingprofiles
         public async Task<ActionResult<EncodingProfileDto>> CreateEncodingProfile([FromBody] CreateEncodingProfileDto request)
         {
@@ -89,12 +75,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Updates an existing encoding profile. Admin only.
-        /// </summary>
-        /// <param name="id">The ID of the encoding profile to update.</param>
-        /// <param name="request">The updated data for the encoding profile.</param>
-        /// <returns>The updated encoding profile.</returns>
         [HttpPut("{id}")] // PUT /api/admin/encodingprofiles/{id}
         public async Task<ActionResult<EncodingProfileDto>> UpdateEncodingProfile(Guid id, [FromBody] UpdateEncodingProfileDto request)
         {
@@ -121,11 +101,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Soft deletes an encoding profile (marks it as inactive). Admin only.
-        /// </summary>
-        /// <param name="id">The ID of the encoding profile to soft delete.</param>
-        /// <returns>No content if successful.</returns>
         [HttpDelete("{id}")] // DELETE /api/admin/encodingprofiles/{id}
         public async Task<IActionResult> SoftDeleteEncodingProfile(Guid id)
         {

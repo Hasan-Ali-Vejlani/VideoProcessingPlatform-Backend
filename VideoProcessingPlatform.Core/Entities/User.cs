@@ -28,7 +28,6 @@ namespace VideoProcessingPlatform.Core.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // Set creation timestamp
 
-        // --- NEW: Navigation collections for EF Core mapping (REQUIRED by ApplicationDbContext) ---
         // Collection of UploadMetadata records associated with this user
         public ICollection<UploadMetadata> UploadMetadata { get; set; } = new List<UploadMetadata>();
 

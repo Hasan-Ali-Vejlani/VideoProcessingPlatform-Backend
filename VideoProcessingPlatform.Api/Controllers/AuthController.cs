@@ -13,7 +13,6 @@ namespace VideoProcessingPlatform.Api.Controllers
     {
         private readonly IAuthService _authService;
 
-        // Constructor with dependency injection for IAuthService
         public AuthController(IAuthService authService)
         {
             _authService = authService;
@@ -29,7 +28,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             if (response.Token != null)
             {
                 // Return 201 Created status for successful registration
-                // Optionally, return the location of the newly created resource (though not strictly necessary for registration)
                 return CreatedAtAction(nameof(Register), response);
             }
             else

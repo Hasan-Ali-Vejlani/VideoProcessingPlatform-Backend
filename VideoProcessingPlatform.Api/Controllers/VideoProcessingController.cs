@@ -17,7 +17,7 @@ namespace VideoProcessingPlatform.Api.Controllers
     public class VideoProcessingController : ControllerBase
     {
         private readonly IVideoProcessingService _videoProcessingService;
-        private readonly IEncodingProfileService _encodingProfileService; // To get active profiles for user selection
+        private readonly IEncodingProfileService _encodingProfileService;
 
         public VideoProcessingController(
             IVideoProcessingService videoProcessingService,
@@ -38,12 +38,8 @@ namespace VideoProcessingPlatform.Api.Controllers
             return userId;
         }
 
-        /// <summary>
-        /// Gets all active encoding profiles available for users to select.
-        /// </summary>
-        /// <returns>A list of active encoding profiles.</returns>
         [HttpGet("encoding-profiles")] // GET /api/videoprocessing/encoding-profiles
-        [AllowAnonymous] // Allow anyone to see available profiles if desired, or make it authenticated if necessary
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<EncodingProfileDto>>> GetActiveEncodingProfiles()
         {
             try
@@ -57,12 +53,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-
-        /// <summary>
-        /// Initiates a transcoding job for an uploaded video.
-        /// </summary>
-        /// <param name="request">Details for the transcoding job (VideoId, EncodingProfileId).</param>
-        /// <returns>Confirmation of job initiation.</returns>
         [HttpPost("transcode")] // POST /api/videoprocessing/transcode
         public async Task<IActionResult> InitiateTranscoding([FromBody] InitiateTranscodingRequestDto request)
         {
@@ -91,11 +81,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Retrieves the status of a specific transcoding job.
-        /// </summary>
-        /// <param name="jobId">The ID of the transcoding job.</param>
-        /// <returns>Detailed transcoding job status.</returns>
         [HttpGet("transcoding-status/{jobId}")] // GET /api/videoprocessing/transcoding-status/{jobId}
         public async Task<ActionResult<TranscodingJobDto>> GetTranscodingJobStatus(Guid jobId)
         {
@@ -120,10 +105,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Retrieves all transcoding jobs for the currently authenticated user.
-        /// </summary>
-        /// <returns>A list of transcoding jobs.</returns>
         [HttpGet("my-transcodes")] // GET /api/videoprocessing/my-transcodes
         public async Task<ActionResult<IEnumerable<TranscodingJobDto>>> GetUserTranscodingJobs()
         {
@@ -143,13 +124,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        // --- NEW: API Endpoints for Thumbnail Feature ---
-
-        /// <summary>
-        /// Gets comprehensive details for a specific video, including its currently selected thumbnail and available renditions.
-        /// </summary>
-        /// <param name="videoId">The ID of the video (UploadMetadata.Id).</param>
-        /// <returns>Video details including thumbnail and renditions.</returns>
         [HttpGet("video/{videoId}/details")] // GET /api/videoprocessing/video/{videoId}/details
         public async Task<IActionResult> GetVideoDetails(Guid videoId)
         {
@@ -175,11 +149,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Gets all generated thumbnails for a specific video.
-        /// </summary>
-        /// <param name="videoId">The ID of the video (UploadMetadata.Id).</param>
-        /// <returns>A list of thumbnail DTOs for the video.</returns>
         [HttpGet("video/{videoId}/thumbnails")] // GET /api/videoprocessing/video/{videoId}/thumbnails
         public async Task<IActionResult> GetAllThumbnailsForVideo(Guid videoId)
         {
@@ -206,12 +175,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Sets a specific thumbnail as the default for a given video.
-        /// </summary>
-        /// <param name="videoId">The ID of the video (UploadMetadata.Id).</param>
-        /// <param name="request">DTO containing the ID of the thumbnail to set as default.</param>
-        /// <returns>Confirmation of default thumbnail update.</returns>
         [HttpPut("video/{videoId}/thumbnail")] // PUT /api/videoprocessing/video/{videoId}/thumbnail
         public async Task<IActionResult> SetDefaultThumbnail(Guid videoId, [FromBody] SetSelectedThumbnailRequestDto request)
         {

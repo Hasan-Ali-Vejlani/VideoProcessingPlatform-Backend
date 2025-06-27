@@ -40,10 +40,8 @@ namespace VideoProcessingPlatform.Core.Entities
 
         public DateTime LastModifiedAt { get; set; } = DateTime.UtcNow;
 
-        // --- NEW: Add this property based on assignment details and worker needs (REQUIRED by ApplicationDbContext) ---
         public bool ApplyDRM { get; set; } = false; // Whether this profile should apply DRM (e.g., for CENC)
 
-        // --- NEW: Navigation collection for related transcoding jobs (REQUIRED by ApplicationDbContext) ---
         public ICollection<TranscodingJob> TranscodingJobs { get; set; } = new List<TranscodingJob>();
     }
 }

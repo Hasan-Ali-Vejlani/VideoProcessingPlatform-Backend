@@ -27,10 +27,10 @@ namespace VideoProcessingPlatform.Core.DTOs
     public class TranscodingJobDto
     {
         public Guid Id { get; set; }
-        public Guid UserId { get; set; } // <--- ADDED THIS LINE: The ID of the user who owns this job
-        public Guid VideoId { get; set; } // Original UploadMetadata ID
+        public Guid UserId { get; set; }
+        public Guid VideoId { get; set; }
         public string OriginalFileName { get; set; } // From UploadMetadata
-        public string EncodingProfileName { get; set; } // Name of the profile used
+        public string EncodingProfileName { get; set; }
         public string Status { get; set; }
         public int Progress { get; set; }
         public string? StatusMessage { get; set; }

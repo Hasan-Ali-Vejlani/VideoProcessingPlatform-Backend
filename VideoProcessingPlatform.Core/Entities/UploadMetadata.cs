@@ -56,13 +56,13 @@ namespace VideoProcessingPlatform.Core.Entities
         [StringLength(512)] // Ensure adequate length for URLs
         public string? SelectedThumbnailUrl { get; set; } // Can be null initially
 
-        // --- Navigation Property for the User who owns this upload ---
+        // Navigation Property for the User who owns this upload
         public User User { get; set; } = null!; // Initialized to null! to indicate it will be populated by EF Core
 
-        // --- Navigation collection for related transcoding jobs ---
+        // Navigation collection for related transcoding jobs
         public ICollection<TranscodingJob> TranscodingJobs { get; set; } = new List<TranscodingJob>();
 
-        // --- NEW: Navigation collection for generated thumbnails (for this video) ---
+        // Navigation collection for generated thumbnails (for this video)
         public ICollection<Thumbnail> Thumbnails { get; set; } = new List<Thumbnail>();
     }
 }

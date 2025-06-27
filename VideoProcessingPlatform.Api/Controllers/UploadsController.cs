@@ -32,11 +32,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             return userId;
         }
 
-        /// <summary>
-        /// Initiates a new video upload session.
-        /// </summary>
-        /// <param name="request">Details of the file to be uploaded.</param>
-        /// <returns>An Upload ID for the session and status.</returns>
         [HttpPost("initiate")] // POST /api/uploads/initiate
         public async Task<IActionResult> InitiateUpload([FromBody] InitiateUploadRequestDto request)
         {
@@ -53,16 +48,7 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Uploads a single chunk of a file.
-        /// </summary>
-        /// <param name="uploadId">The ID of the ongoing upload session.</param>
-        /// <param name="chunkIndex">The 0-based index of the current chunk.</param>
-        /// <param name="totalChunks">The total number of chunks for the file.</param>
-        /// <param name="chunkData">The binary data of the chunk.</param>
-        /// <returns>Status of the chunk upload and overall file completion.</returns>
         [HttpPost("chunk")] // POST /api/uploads/chunk
-        // Use FromForm for multipart/form-data content type which is typical for file uploads
         public async Task<IActionResult> UploadChunk([FromForm] ChunkUploadRequestDto request)
         {
             try
@@ -100,11 +86,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Retrieves the status of a specific upload session.
-        /// </summary>
-        /// <param name="uploadId">The ID of the upload session.</param>
-        /// <returns>Detailed upload status.</returns>
         [HttpGet("{uploadId}/status")] // GET /api/uploads/{uploadId}/status
         public async Task<IActionResult> GetUploadStatus(Guid uploadId)
         {
@@ -119,14 +100,11 @@ namespace VideoProcessingPlatform.Api.Controllers
                 }
 
                 // A user can only see their own upload statuses
-                // This check is implicitly handled by GetUploadStatus querying by userId,
-                // but good to be explicit for security in controller.
                 var userUploads = await _uploadService.GetUserUploads(userId, null); // Get all uploads for the user
                 if (!userUploads.Any(u => u.Id == uploadId))
                 {
                     return Forbid(); // 403 Forbidden if the upload does not belong to the user
                 }
-
 
                 return Ok(uploadStatus);
             }
@@ -140,11 +118,6 @@ namespace VideoProcessingPlatform.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Retrieves all upload statuses for the currently authenticated user.
-        /// </summary>
-        /// <param name="status">Optional: Filter by upload status (e.g., "InProgress", "Completed").</param>
-        /// <returns>A list of upload statuses.</returns>
         [HttpGet] // GET /api/uploads
         public async Task<IActionResult> GetUserUploads([FromQuery] string? status = null)
         {

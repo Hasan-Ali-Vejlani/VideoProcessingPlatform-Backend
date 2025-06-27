@@ -33,7 +33,6 @@ namespace VideoProcessingPlatform.Core.Interfaces
     }
 
     // Interface for building FFmpeg command arguments.
-    // This abstracts the logic for constructing FFmpeg command strings from profile data.
     public interface IFFmpegCommandBuilder
     {
         // Builds the complete FFmpeg command arguments template for a given profile.
@@ -42,8 +41,7 @@ namespace VideoProcessingPlatform.Core.Interfaces
         string BuildCommand(string resolution, int bitrateKbps, string format, string baseArgsTemplate,
                             string inputPathPlaceholder = "{inputPath}", string outputPathPlaceholder = "{outputPath}");
 
-        // Validates if the provided FFmpegArgsTemplate contains the necessary placeholders
-        // and basic structure. This can be a simple check or more complex parsing.
+        // Validates if the provided FFmpegArgsTemplate contains the necessary placeholders and basic structure.
         bool ValidateTemplate(string template);
     }
 

@@ -25,7 +25,7 @@ namespace VideoProcessingPlatform.Core.Interfaces
         // Retrieves UploadMetadata records for a specific user filtered by status.
         Task<IEnumerable<UploadMetadata>> GetByUserIdAndStatus(Guid userId, string status);
 
-        // --- NEW: Retrieves an UploadMetadata record by its ID, including all associated Thumbnail entities. ---
+        // Retrieves an UploadMetadata record by its ID, including all associated Thumbnail entities.
         Task<UploadMetadata?> GetByIdWithThumbnails(Guid id);
     }
 }

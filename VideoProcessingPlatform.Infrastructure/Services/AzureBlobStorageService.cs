@@ -144,13 +144,9 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         public async Task<Stream> RetrieveFile(string path)
         {
             // This method needs to handle both full URIs and relative paths if it's used for fetching from renditions.
-            // For now, it expects a full URI, so the below parsing logic is fine.
             Uri uri;
             if (!Uri.TryCreate(path, UriKind.Absolute, out uri))
             {
-                // If it's not an absolute URI, assume it's a relative path within a known container
-                // This is a fallback and might need more robust container inference or explicit input.
-                // For now, let's assume 'path' is a full URI if we reach here.
                 _logger.LogError($"RetrieveFile received an invalid or relative path: {path}. Expected absolute URI.");
                 throw new ArgumentException($"Invalid or relative path provided to RetrieveFile: {path}. Expected absolute URI.", nameof(path));
             }
@@ -213,11 +209,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
 
                 renditionStream.Position = 0;
                 await blobClient.UploadAsync(renditionStream, new BlobHttpHeaders { ContentType = contentType });
-                // --- FIX: Store relative path only, not full URI, if that's what's in the DB ---
-                // Assuming the database column `VideoRendition.StoragePath` is designed to store
-                // only the relative path (e.g., "renditions/jobId/file.mp4") and not the full blob URI.
-                // If your DB expects full URI, change this back to blobClient.Uri.ToString();
-                // storedPaths.Add($"{containerClient.Name}/{blobName}"); // Store "containerName/blobName"
                 storedPaths.Add(blobClient.Uri.ToString());
                 _logger.LogInformation($"Stored rendition {renditionType}. Relative Path: {containerClient.Name}/{blobName}");
             }

@@ -149,7 +149,7 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
                                  .Include(tj => tj.UploadMetadata) // Include UploadMetadata for DTO mapping
                                  .Include(tj => tj.EncodingProfile) // Include EncodingProfile for DTO mapping
                                  .Where(tj => tj.UploadMetadataId == videoId)
-                                 .OrderByDescending(tj => tj.CreatedAt) // --- FIX: Removed redundant 'tj.' here ---
+                                 .OrderByDescending(tj => tj.CreatedAt)
                                  .FirstOrDefaultAsync();
         }
     }

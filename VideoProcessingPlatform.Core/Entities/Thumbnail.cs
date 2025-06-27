@@ -28,9 +28,6 @@ namespace VideoProcessingPlatform.Core.Entities
 
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow; // Timestamp when thumbnail was generated
 
-        // --- Navigation Property ---
-        // The UploadMetadata (video) that this thumbnail belongs to.
-        // Marked as null! because EF Core will populate it when loaded from DB.
         public UploadMetadata UploadMetadata { get; set; } = null!;
     }
 }

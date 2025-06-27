@@ -33,15 +33,14 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         });
 });
 
-// 3. Register your services and repositories for Dependency Injection
+// 3. Register services and repositories for Dependency Injection
 // Authentication/Authorization related services
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IJWTService, JWTService>();
-builder.Services.AddScoped<IAuthService, AuthService>(); // Your AuthService in Api project
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 // --- Upload Related Services and Repositories ---
 builder.Services.AddScoped<IUploadMetadataRepository, UploadMetadataRepository>();
-// FIX: Change IFileStorageService to use DI properly by injecting IConfiguration and ILogger
 builder.Services.AddSingleton<IFileStorageService>(provider =>
     new AzureBlobStorageService(
         provider.GetRequiredService<IConfiguration>(),
@@ -63,18 +62,17 @@ builder.Services.AddScoped<IVideoProcessingService, VideoProcessingService>();
 
 // --- Playback Related Services ---
 builder.Services.AddTransient<IVideoPlaybackService, VideoPlaybackService>();
-// FIX: Change CDNService registration to use DI properly by injecting IConfiguration, IFileStorageService and ILogger
 builder.Services.AddTransient<ICDNService>(provider =>
-    new CDNService(
+    new AzureCDNService(
         provider.GetRequiredService<IConfiguration>(),
         provider.GetRequiredService<IFileStorageService>(), // Inject IFileStorageService
-        provider.GetRequiredService<ILogger<CDNService>>() // Inject ILogger
+        provider.GetRequiredService<ILogger<AzureCDNService>>() // Inject ILogger
     )
 );
 
 // --- Thumbnail Related Services and Repositories ---
-builder.Services.AddScoped<IThumbnailRepository, ThumbnailRepository>(); // --- NEW ---
-builder.Services.AddScoped<IThumbnailService, ThumbnailService>();       // --- NEW ---
+builder.Services.AddScoped<IThumbnailRepository, ThumbnailRepository>();
+builder.Services.AddScoped<IThumbnailService, ThumbnailService>();
 
 
 // 4. Configure JWT Authentication

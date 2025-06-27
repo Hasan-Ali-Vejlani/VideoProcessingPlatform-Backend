@@ -10,7 +10,7 @@ namespace VideoProcessingPlatform.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize] // All playback endpoints require authentication
+    [Authorize(Policy = "AuthenticatedUser")] // All playback endpoints require authentication
     public class PlaybackController : ControllerBase
     {
         private readonly IVideoPlaybackService _videoPlaybackService;

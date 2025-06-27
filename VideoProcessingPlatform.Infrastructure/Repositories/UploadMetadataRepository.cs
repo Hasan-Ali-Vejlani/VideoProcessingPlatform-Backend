@@ -62,7 +62,6 @@ namespace VideoProcessingPlatform.Infrastructure.Repositories
                                    .ToListAsync();
         }
 
-        // --- NEW METHOD: GetByIdWithThumbnails (from UploadMetadataRepository.cs placeholder) ---
         /// <summary>
         /// Retrieves an UploadMetadata record by its ID, including all associated Thumbnail entities.
         /// </summary>

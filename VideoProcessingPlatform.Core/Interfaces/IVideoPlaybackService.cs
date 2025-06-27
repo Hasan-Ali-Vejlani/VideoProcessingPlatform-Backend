@@ -17,9 +17,5 @@ namespace VideoProcessingPlatform.Core.Interfaces
         /// <param name="userId">The ID of the user requesting playback (for authorization checks).</param>
         /// <returns>A SignedUrlDto containing the URL if successful, and a message.</returns>
         Task<SignedUrlDto> GetSignedVideoUrl(Guid videoId, string requestedRenditionType, Guid userId);
-
-        // You might add other playback-related methods here in the future, such as:
-        // Task<IEnumerable<VideoRenditionDto>> GetAvailableRenditions(Guid videoId);
-        // Task<bool> RecordPlaybackEvent(Guid userId, Guid videoId, string renditionType, TimeSpan duration);
     }
 }

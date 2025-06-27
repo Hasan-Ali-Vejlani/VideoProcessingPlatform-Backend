@@ -25,7 +25,6 @@ namespace VideoProcessingPlatform.Core.Interfaces
         // Stores multiple video renditions. Returns a list of storage paths for the renditions.
         Task<List<string>> StoreRenditions(Guid jobId, Dictionary<string, Stream> renditions);
 
-        // --- NEW: Method to generate a Blob SAS URL (REQUIRED by CDNService) ---
         /// <summary>
         /// Generates a Shared Access Signature (SAS) URL for a specific blob.
         /// This URL allows temporary, limited access to the blob.
@@ -35,11 +34,6 @@ namespace VideoProcessingPlatform.Core.Interfaces
         /// <returns>The full Blob SAS URL.</returns>
         Task<string> GenerateBlobSasUrl(string blobUri, TimeSpan expiresIn);
 
-        // --- NEW: Method to delete a file from storage (from previous context, re-adding for completeness) ---
-        /// <summary>
-        /// Deletes a file from the storage service given its path.
-        /// </summary>
-        /// <param name="filePath">The full storage path (URI) of the file to delete.</param>
         Task DeleteFile(string filePath);
     }
 }

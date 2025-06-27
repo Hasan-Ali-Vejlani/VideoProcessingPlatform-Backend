@@ -18,7 +18,7 @@ namespace VideoProcessingPlatform.Infrastructure.Data
         public DbSet<EncodingProfile> EncodingProfiles { get; set; } = default!;
         public DbSet<TranscodingJob> TranscodingJobs { get; set; } = default!;
         public DbSet<VideoRendition> VideoRenditions { get; set; } = default!;
-        public DbSet<Thumbnail> Thumbnails { get; set; } = default!; // --- NEW: DbSet for Thumbnail entity ---
+        public DbSet<Thumbnail> Thumbnails { get; set; } = default!;
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -154,7 +154,7 @@ namespace VideoProcessingPlatform.Infrastructure.Data
                 entity.Property(vr => vr.BitrateKbps).IsRequired();
             });
 
-            // --- NEW: Configure Thumbnail entity ---
+            // Configure Thumbnail entity
             modelBuilder.Entity<Thumbnail>(entity =>
             {
                 entity.HasKey(t => t.Id);

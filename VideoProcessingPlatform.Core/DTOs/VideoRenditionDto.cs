@@ -9,7 +9,7 @@ namespace VideoProcessingPlatform.Core.DTOs
         // Unique identifier for the rendition.
         public Guid Id { get; set; }
 
-        // --- ADDED BACK: ID of the transcoding job this rendition belongs to (FK) ---
+        // ID of the transcoding job this rendition belongs to (FK)
         public Guid TranscodingJobId { get; set; }
 
         // The type or quality of the rendition (e.g., "HLS_720p", "DASH_1080p", "MP4_360p").
@@ -31,7 +31,7 @@ namespace VideoProcessingPlatform.Core.DTOs
         // This field will be populated by the VideoPlaybackService.
         public string? PlaybackUrl { get; set; } // Nullable if not yet generated or if an error occurs
 
-        // --- ADDED BACK: Timestamp when this rendition was generated/completed ---
+        // Timestamp when this rendition was generated/completed
         public DateTime GeneratedAt { get; set; }
     }
 }

@@ -30,7 +30,6 @@ namespace VideoProcessingPlatform.Core.Interfaces
         // Placeholder for marking a job as failed (internal API/method)
         Task FailTranscodingJob(Guid jobId, string errorMessage);
 
-        // --- NEW: Thumbnail-related methods as per sequence diagram ---
         // Gets comprehensive video details including default thumbnail.
         Task<VideoDetailsDto?> GetVideoDetailsAsync(Guid videoId, Guid userId); // Assuming VideoDetailsDto includes thumbnail info
 

@@ -36,7 +36,7 @@ namespace VideoProcessingPlatform.Core.Interfaces
         // Retrieves completed video renditions for a specific video ID.
         Task<IEnumerable<VideoRendition>> GetCompletedRenditionsForVideo(Guid videoId);
 
-        // --- NEW: Retrieves the most recent transcoding job for a specific video ---
+        // Retrieves the most recent transcoding job for a specific video
         Task<TranscodingJob?> GetLatestJobForVideo(Guid videoId);
     }
 }

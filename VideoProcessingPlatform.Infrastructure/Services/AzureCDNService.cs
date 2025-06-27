@@ -9,15 +9,15 @@ using VideoProcessingPlatform.Core.Interfaces;
 namespace VideoProcessingPlatform.Infrastructure.Services
 {
     // Implementation of ICDNService for Azure CDN by generating Blob SAS URLs.
-    public class CDNService : ICDNService
+    public class AzureCDNService : ICDNService
     {
         private readonly IConfiguration _configuration;
         private readonly IFileStorageService _fileStorageService; // --- NEW: Inject IFileStorageService ---
-        private readonly ILogger<CDNService> _logger; // --- NEW: Logger instance ---
+        private readonly ILogger<AzureCDNService> _logger; // --- NEW: Logger instance ---
 
         private readonly string _cdnBaseUrl; // Your Azure Front Door/CDN endpoint base URL
 
-        public CDNService(IConfiguration configuration, IFileStorageService fileStorageService, ILogger<CDNService> logger) // --- NEW: Inject dependencies ---
+        public AzureCDNService(IConfiguration configuration, IFileStorageService fileStorageService, ILogger<AzureCDNService> logger) // --- NEW: Inject dependencies ---
         {
             _configuration = configuration;
             _fileStorageService = fileStorageService; // Initialize

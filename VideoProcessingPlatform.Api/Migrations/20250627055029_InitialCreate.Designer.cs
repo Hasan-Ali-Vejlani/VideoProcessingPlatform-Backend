@@ -12,8 +12,8 @@ using VideoProcessingPlatform.Infrastructure.Data;
 namespace VideoProcessingPlatform.Api.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250625071359_AddCdnAndEntityPropertyConsistency")]
-    partial class AddCdnAndEntityPropertyConsistency
+    [Migration("20250627055029_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -76,6 +76,39 @@ namespace VideoProcessingPlatform.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("EncodingProfiles");
+                });
+
+            modelBuilder.Entity("VideoProcessingPlatform.Core.Entities.Thumbnail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("GeneratedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("TimestampSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UploadMetadataId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UploadMetadataId");
+
+                    b.ToTable("Thumbnails");
                 });
 
             modelBuilder.Entity("VideoProcessingPlatform.Core.Entities.TranscodingJob", b =>
@@ -303,6 +336,17 @@ namespace VideoProcessingPlatform.Api.Migrations
                     b.ToTable("VideoRenditions");
                 });
 
+            modelBuilder.Entity("VideoProcessingPlatform.Core.Entities.Thumbnail", b =>
+                {
+                    b.HasOne("VideoProcessingPlatform.Core.Entities.UploadMetadata", "UploadMetadata")
+                        .WithMany("Thumbnails")
+                        .HasForeignKey("UploadMetadataId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UploadMetadata");
+                });
+
             modelBuilder.Entity("VideoProcessingPlatform.Core.Entities.TranscodingJob", b =>
                 {
                     b.HasOne("VideoProcessingPlatform.Core.Entities.EncodingProfile", "EncodingProfile")
@@ -364,6 +408,8 @@ namespace VideoProcessingPlatform.Api.Migrations
 
             modelBuilder.Entity("VideoProcessingPlatform.Core.Entities.UploadMetadata", b =>
                 {
+                    b.Navigation("Thumbnails");
+
                     b.Navigation("TranscodingJobs");
                 });
 
