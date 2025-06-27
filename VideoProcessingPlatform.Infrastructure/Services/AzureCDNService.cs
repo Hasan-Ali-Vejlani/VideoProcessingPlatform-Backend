@@ -12,8 +12,8 @@ namespace VideoProcessingPlatform.Infrastructure.Services
     public class AzureCDNService : ICDNService
     {
         private readonly IConfiguration _configuration;
-        private readonly IFileStorageService _fileStorageService; // --- NEW: Inject IFileStorageService ---
-        private readonly ILogger<AzureCDNService> _logger; // --- NEW: Logger instance ---
+        private readonly IFileStorageService _fileStorageService;
+        private readonly ILogger<AzureCDNService> _logger;
 
         private readonly string _cdnBaseUrl; // Your Azure Front Door/CDN endpoint base URL
 
@@ -32,13 +32,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Generates a signed URL for a given content path.
-        /// For this implementation, it generates an Azure Blob Storage SAS URL for the blob
-        /// and then constructs a CDN-friendly URL using that SAS.
-        /// </summary>
-        /// <param name="storagePath">The full blob URI where the content is stored (e.g., from VideoRendition.StoragePath).</param>
-        /// <param name="expiresIn">The duration for which the signed URL should be valid.</param>
         /// <returns>The CDN-backed SAS URL as a string.</returns>
         public async Task<string> GenerateSignedUrl(string storagePath, TimeSpan expiresIn)
         {
@@ -55,10 +48,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 _logger.LogInformation($"Generated Blob SAS URL for {storagePath}.");
 
                 // 2. Construct the CDN-friendly URL by replacing the blob storage domain with the CDN domain.
-                // Example:
-                // Original Blob URI: https://yourstorageaccount.blob.core.windows.net/renditions/jobId/file.mp4
-                // CDN Base URL:      https://videoplayback-abcdef.azurefd.net/
-                // Target:            https://videoplayback-abcdef.azurefd.net/renditions/jobId/file.mp4?sv=... (SAS query params)
 
                 // First, ensure the CDN base URL has a trailing slash for correct path combining
                 string cdnBase = _cdnBaseUrl.EndsWith("/") ? _cdnBaseUrl : _cdnBaseUrl + "/";
@@ -68,9 +57,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
                 string blobRelativePathAndQuery = blobUri.AbsolutePath + blobUri.Query;
 
                 // Combine CDN base URL with the blob's path and SAS query parameters
-                // This assumes your Front Door is configured to access your Blob Storage at its root path,
-                // and the container name (e.g., 'renditions') is part of the path in blobRelativePathAndQuery.
-                // E.g., if blobUri.AbsolutePath is /renditions/jobId/file.mp4, this works directly.
                 string finalCdnSignedUrl = $"{cdnBase.TrimEnd('/')}{blobRelativePathAndQuery}";
 
                 _logger.LogInformation($"Constructed CDN-backed SAS URL: {finalCdnSignedUrl}");
@@ -83,16 +69,12 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             }
         }
 
-        /// <summary>
-        /// Simulates cache invalidation for Azure CDN.
-        /// For a real implementation, this would use Azure Management SDKs or direct REST API calls
-        /// to trigger a purge operation on the CDN endpoint.
-        /// </summary>
+
         /// <param name="pathsToInvalidate">A list of content paths to invalidate in the CDN cache.</param>
         public Task InvalidateCache(List<string> pathsToInvalidate)
         {
             // This is a placeholder. A real implementation would interact with Azure CDN Purge API.
-            _logger.LogInformation($"[CDNService] Simulating cache invalidation for paths: {string.Join(", ", pathsToInvalidate)}");
+            _logger.LogInformation($"[CDNService] cache invalidation for paths: {string.Join(", ", pathsToInvalidate)}");
             return Task.CompletedTask;
         }
     }

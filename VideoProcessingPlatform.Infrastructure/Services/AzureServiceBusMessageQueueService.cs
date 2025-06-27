@@ -169,10 +169,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         public async void Dispose()
         {
             _logger.LogInformation("Disposing Azure Service Bus client resources.");
-            // These DisposeAsync calls should be awaited in an IAsyncDisposable context,
-            // but for IDisposable (which IMessageQueueService now extends) and fire-and-forget in `Program.cs`,
-            // we use async void. In a production app, use `IAsyncDisposable` on the service,
-            // and `await host.RunAsync()` to ensure proper shutdown.
             try
             {
                 if (_sender != null) await _sender.DisposeAsync();

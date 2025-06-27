@@ -57,12 +57,10 @@ namespace VideoProcessingPlatform.Worker.Services
                     try
                     {
                         _logger.LogInformation("Attempting to consume message from queue...");
-                        // --- FIX: Use ConsumeTranscodingJob() as defined in IMessageQueueService ---
                         queuedMessage = await messageQueueService.ConsumeTranscodingJob();
 
-                        if (queuedMessage != null) // Removed redundant `&& queuedMessage.MessageBody != null` as Content is non-nullable
+                        if (queuedMessage != null)
                         {
-                            // --- FIX: Use .Content property as defined in QueuedMessage<T> ---
                             jobMessage = queuedMessage.Content;
 
                             _logger.LogInformation($"Processing Transcoding Job ID: {jobMessage.TranscodingJobId}");
@@ -266,7 +264,6 @@ namespace VideoProcessingPlatform.Worker.Services
 
                                     if (queuedMessage.RawMessageHandle != null)
                                     {
-                                        // --- FIX: Use AcknowledgeMessage as defined in IMessageQueueService ---
                                         await messageQueueService.AcknowledgeMessage(queuedMessage.RawMessageHandle);
                                     }
                                 }
@@ -335,8 +332,6 @@ namespace VideoProcessingPlatform.Worker.Services
             _logger.LogInformation("Transcoding Worker Service stopped.");
         }
 
-        // --- NEW HELPER METHOD: GetVideoDurationAsync using FFprobe ---
-        // --- FIX: Added CancellationToken parameter ---
         private async Task<double> GetVideoDurationAsync(string videoFilePath, CancellationToken cancellationToken)
         {
             var processInfo = new ProcessStartInfo(_ffprobePath, $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{videoFilePath}\"")
@@ -370,8 +365,6 @@ namespace VideoProcessingPlatform.Worker.Services
             return 0;
         }
 
-        // --- NEW HELPER METHOD: GenerateThumbnailAsync using FFmpeg ---
-        // --- FIX: Added CancellationToken parameter ---
         private async Task<byte[]> GenerateThumbnailAsync(string videoFilePath, int timestampSeconds, CancellationToken cancellationToken)
         {
             string tempThumbnailPath = Path.Combine(Path.GetTempPath(), $"thumb_{Guid.NewGuid():N}.jpg");

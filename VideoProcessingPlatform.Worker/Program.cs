@@ -53,8 +53,6 @@ class Program
                     )
                 );
 
-                // FFmpeg and FFprobe paths are now directly accessed in TranscodingWorkerService via IConfiguration
-                // The FFmpegSettings class is no longer needed for this approach.
             })
             .Build();
 

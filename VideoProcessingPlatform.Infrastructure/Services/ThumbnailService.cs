@@ -7,12 +7,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using VideoProcessingPlatform.Core.Extensions; // --- NEW: Add this using statement ---
+using VideoProcessingPlatform.Core.Extensions;
 
 
 namespace VideoProcessingPlatform.Infrastructure.Services
 {
-    // Concrete implementation of IThumbnailService.
     public class ThumbnailService : IThumbnailService
     {
         private readonly IThumbnailRepository _thumbnailRepository;

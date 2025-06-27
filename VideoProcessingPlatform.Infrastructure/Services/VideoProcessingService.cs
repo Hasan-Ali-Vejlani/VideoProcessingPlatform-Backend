@@ -207,7 +207,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             _logger.LogError($"Transcoding job {jobId} failed: {errorMessage}");
         }
 
-        // --- Implement GetVideoDetailsAsync for frontend display ---
         public async Task<VideoDetailsDto?> GetVideoDetailsAsync(Guid videoId, Guid userId)
         {
             var uploadMetadata = await _uploadRepository.GetByIdWithThumbnails(videoId);
@@ -268,7 +267,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             return videoDetailsDto;
         }
 
-        // --- Implement GetAllThumbnailsForVideoAsync ---
         public async Task<IEnumerable<ThumbnailDto>> GetAllThumbnailsForVideoAsync(Guid videoId)
         {
             var thumbnails = await _thumbnailService.GetThumbnailsForVideoAsync(videoId);
@@ -282,7 +280,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             return thumbnails;
         }
 
-        // --- Implement SetDefaultThumbnailAsync ---
         public async Task<SetSelectedThumbnailResponseDto> SetDefaultThumbnailAsync(Guid videoId, Guid thumbnailId)
         {
             return await _thumbnailService.SetDefaultThumbnailAsync(videoId, thumbnailId);

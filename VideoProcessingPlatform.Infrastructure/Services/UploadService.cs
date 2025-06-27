@@ -26,23 +26,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
         // Initiates a new upload session or resumes an existing one if possible.
         public async Task<InitiateUploadResponseDto> InitiateUpload(Guid userId, InitiateUploadRequestDto request)
         {
-            // First, try to find if an incomplete upload with the same details exists for the user.
-            // This is a basic resume check. For more robust resume, you might need to check file hash, etc.
-            // For now, let's assume we create a new entry for each initiation,
-            // but the frontend will manage the "resume" by providing the existing UploadId.
-            // However, the sequence diagram suggests `GetIncompleteUploads`, so let's adjust.
-            // For *initiation*, we assume it's a new upload or an explicit re-initiation.
-            // The frontend should determine if it's a resume and pass the UploadId to ProcessChunk directly.
-            // The InitiateUpload endpoint should primarily be for *new* uploads.
-
-            // Let's refine based on the sequence diagram "ResumeSeq.txt"
-            // The resume flow starts by frontend querying for incomplete uploads.
-            // If user initiates a *new* upload, we create new metadata.
-
-            // Check for existing uploads by file name and size for potential resume,
-            // though the frontend typically handles prompting for resume.
-            // For simplicity, this `InitiateUpload` will always create a new entry.
-            // The `GetUploadStatus` method will be for checking resume points.
 
             var newUploadMetadata = new UploadMetadata
             {

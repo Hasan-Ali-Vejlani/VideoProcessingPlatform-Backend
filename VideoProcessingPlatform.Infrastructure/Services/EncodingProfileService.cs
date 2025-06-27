@@ -9,8 +9,6 @@ using System.Threading.Tasks;
 
 namespace VideoProcessingPlatform.Infrastructure.Services
 {
-    // Concrete implementation of IEncodingProfileService.
-    // Handles business logic for encoding profile management.
     public class EncodingProfileService : IEncodingProfileService
     {
         private readonly IEncodingProfileRepository _profileRepository;
@@ -45,13 +43,6 @@ namespace VideoProcessingPlatform.Infrastructure.Services
             }
 
             // 4. Build/finalize FFmpegArgsTemplate (though in this design, we take it directly from DTO)
-            // The BuildCommand method in IFFmpegCommandBuilder can be used here if you want to dynamically generate
-            // parts of the template based on other DTO fields (resolution, bitrate, format).
-            // For now, we will simply use the provided request.FFmpegArgsTemplate.
-            // If you want to use it dynamically:
-            // string finalFFmpegArgsTemplate = _ffmpegCommandBuilder.BuildCommand(
-            //     request.Resolution, request.BitrateKbps, request.Format, request.FFmpegArgsTemplate
-            // );
 
             // 5. Create entity
             var profile = new EncodingProfile
