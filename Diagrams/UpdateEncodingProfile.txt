@@ -1,0 +1,62 @@
+sequenceDiagram
+    participant AdminUser as Admin User
+    participant Frontend as Angular Admin Panel
+    participant EncodingProfilesController as .NET EncodingProfilesController
+    participant IEncodingProfileService as IEncodingProfileService
+    participant EncodingProfileService as .NET EncodingProfileService
+    participant IFFmpegCommandBuilder as IFFmpegCommandBuilder
+    participant FFmpegCommandBuilder as .NET FFmpegCommandBuilder
+    participant IEncodingProfileRepository as IEncodingProfileRepository
+    participant EncodingProfileRepository as .NET EncodingProfileRepository
+    participant Database as SQL Server (via Entity Framework)
+
+    AdminUser->>Frontend: Selects Profile, Clicks "Edit", Modifies Form
+    Frontend->>Frontend: Attaches JWT Token (containing AdminUser's role)
+    Frontend->>EncodingProfilesController: PUT /api/admin/encodingprofiles/{id} (UpdatedProfileData)
+    activate EncodingProfilesController
+    EncodingProfilesController->>EncodingProfilesController: Authorize: Check if User has 'Admin' role (from JWT)
+    alt User is NOT Admin
+        EncodingProfilesController-->>Frontend: 403 Forbidden
+        Frontend->>AdminUser: Display "Access Denied" message
+    else User IS Admin
+        EncodingProfilesController->>IEncodingProfileService: UpdateEncodingProfile(id, UpdatedProfileData)
+        EncodingProfilesController-->>EncodingProfileService: Implementation of IEncodingProfileService
+        activate EncodingProfileService
+        EncodingProfileService->>EncodingProfileService: Validate Profile Data
+
+        EncodingProfileService->>IEncodingProfileRepository: GetById(id)
+        EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+        activate EncodingProfileRepository
+        EncodingProfileRepository->>Database: Query: Find EncodingProfile by ID (via Entity Framework)
+        activate Database
+        Database-->>EncodingProfileRepository: Existing Profile Entity | null
+        deactivate Database
+        EncodingProfileRepository-->>EncodingProfileService: Existing Profile Entity | null
+        deactivate EncodingProfileRepository
+        alt Profile Not Found
+            EncodingProfileService-->>EncodingProfilesController: Exception/Error (Not Found)
+            EncodingProfilesController-->>Frontend: 404 Not Found
+            Frontend->>AdminUser: Display Error Message
+        else Profile Found
+            EncodingProfileService->>IFFmpegCommandBuilder: BuildCommand(UpdatedProfileData, inputPathPlaceholder, outputPathPlaceholder)
+            EncodingProfileService-->>FFmpegCommandBuilder: Implementation of IFFmpegCommandBuilder
+            activate FFmpegCommandBuilder
+            FFmpegCommandBuilder-->>EncodingProfileService: Generated FFmpegArgsTemplate String
+            deactivate FFmpegCommandBuilder
+
+            EncodingProfileService->>IEncodingProfileRepository: Update(ExistingProfileEntity, UpdatedProfileData with GeneratedArgs)
+            EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+            activate EncodingProfileRepository
+            EncodingProfileRepository->>Database: Update EncodingProfile (via Entity Framework)
+            activate Database
+            Database-->>EncodingProfileRepository: Profile Updated
+            deactivate Database
+            EncodingProfileRepository-->>EncodingProfileService: Updated Profile Entity
+            deactivate EncodingProfileRepository
+            EncodingProfileService-->>EncodingProfilesController: Updated Profile DTO
+            deactivate EncodingProfileService
+            EncodingProfilesController-->>Frontend: 200 OK (Updated Profile DTO)
+            deactivate EncodingProfilesController
+            Frontend->>AdminUser: Displays success message, updates table
+        end
+    end

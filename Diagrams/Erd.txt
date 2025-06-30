@@ -1,0 +1,86 @@
+erDiagram
+    User {
+        UUID Id PK "Unique identifier for the user"
+        VARCHAR(50) Username UK "Unique username"
+        VARCHAR(255) Email UK "Unique email address"
+        VARCHAR(255) PasswordHash "Hashed password"
+        VARCHAR(50) Role "User role (e.g., 'User', 'Admin')"
+        DATETIME CreatedAt "Timestamp of creation"
+    }
+
+    UploadMetadata {
+        UUID Id PK "Unique ID for the upload session (VideoId)"
+        UUID UserId FK "ID of the user who uploaded the video"
+        VARCHAR(255) OriginalFileName "Original name of the uploaded file"
+        BIGINT OriginalFileSize "Size of the original file in bytes"
+        VARCHAR(100) MimeType "MIME type of the uploaded file"
+        INT TotalChunks "Total number of chunks in the upload"
+        TEXT CompletedChunks "Serialized list/bitmask of completed chunk indices (e.g., JSON string)"
+        VARCHAR(512) OriginalStoragePath "Path/URI where the original, merged uploaded video file is stored (local or blob storage)"
+        VARCHAR(50) UploadStatus "Status of the upload (e.g., 'InProgress', 'Completed', 'Failed')"
+        DATETIME UploadedAt "Timestamp of upload initiation"
+        DATETIME LastUpdatedAt "Timestamp when the upload metadata or status was last updated"
+        VARCHAR(512) SelectedThumbnailUrl "URL of the thumbnail selected by the user (nullable)"
+    }
+
+    EncodingProfile {
+        UUID Id PK "Unique identifier for the encoding profile"
+        VARCHAR(255) ProfileName UK "Unique name of the encoding profile"
+        VARCHAR(1000) Description "Description of the profile"
+        VARCHAR(50) Resolution "Target resolution (e.g., '1920x1080')"
+        INT BitrateKbps "Target video bitrate in kilobits per second"
+        VARCHAR(50) Format "Output format (e.g., 'mp4', 'hls', 'dash')"
+        VARCHAR(4000) FFmpegArgsTemplate "Template string for FFmpeg arguments"
+        BOOLEAN IsActive "Soft delete flag (TRUE = active, FALSE = soft deleted)"
+        DATETIME CreatedAt "Timestamp of creation"
+        DATETIME LastModifiedAt "Timestamp of last update"
+        BOOLEAN ApplyDRM "Whether this profile should apply DRM"
+    }
+
+    TranscodingJob {
+        UUID Id PK "Unique ID for the transcoding job"
+        UUID UploadMetadataId FK "ID of the uploaded video (UploadMetadata.Id)"
+        UUID UserId FK "ID of the user who initiated the job"
+        UUID EncodingProfileId FK "ID of the encoding profile used for this job"
+        VARCHAR(512) SourceStoragePath "Path to the original video file in storage"
+        VARCHAR(50) Status "Current status (e.g., 'Queued', 'InProgress', 'Completed', 'Failed')"
+        INT Progress "Progress percentage (0-100)"
+        TEXT StatusMessage "Optional message for status updates or errors"
+        DATETIME CreatedAt "Timestamp when job was created/queued"
+        DATETIME LastUpdatedAt "Timestamp when job status was last updated"
+        VARCHAR(255) EncodingProfileName "Name of the profile used for this job"
+        VARCHAR(50) TargetResolution "Resolution used for this job"
+        INT TargetBitrateKbps "Bitrate in Kbps used for this job"
+        VARCHAR(50) TargetFormat "Format used for this job"
+        VARCHAR(4000) FFmpegArgsTemplate "FFmpeg template used for this job"
+        BOOLEAN ApplyDRM "Whether DRM was applied for this job"
+    }
+
+    VideoRendition {
+        UUID Id PK "Unique ID for the video rendition"
+        UUID TranscodingJobId FK "ID of the transcoding job this rendition belongs to"
+        VARCHAR(100) RenditionType "Type of rendition (e.g., 'HLS_720p', 'DASH_1080p')"
+        VARCHAR(512) StoragePath "Path/URI where this specific rendition is stored"
+        VARCHAR(50) Resolution "Resolution of the rendition (e.g., '1280x720')"
+        INT BitrateKbps "Bitrate of the rendition in Kbps"
+        BOOLEAN IsEncrypted "Whether this rendition is encrypted"
+        VARCHAR(512) PlaybackUrl "Playback URL (e.g., CDN URL, might be dynamic) (nullable)"
+        DATETIME GeneratedAt "Timestamp when this rendition was generated/completed"
+    }
+
+    Thumbnail {
+        UUID Id PK "Unique ID for the thumbnail"
+        UUID UploadMetadataId FK "ID of the video this thumbnail belongs to (UploadMetadata.Id)"
+        VARCHAR(512) StoragePath "Path/URI to the thumbnail image (local or blob)"
+        INT TimestampSeconds "Timestamp in seconds from video start where thumbnail was extracted"
+        INT Order "Order or specific frame index of the thumbnail"
+        BOOLEAN IsDefault "Indicates if this is the currently selected default thumbnail for the video"
+        DATETIME GeneratedAt "Timestamp when thumbnail was generated"
+    }
+
+    User ||--o{ UploadMetadata : "has uploaded"
+    User ||--o{ TranscodingJob : "initiated"
+    UploadMetadata ||--o{ TranscodingJob : "is source for"
+    EncodingProfile ||--o{ TranscodingJob : "used by"
+    TranscodingJob ||--o{ VideoRendition : "generates"
+    UploadMetadata ||--o{ Thumbnail : "has thumbnail"

@@ -1,0 +1,108 @@
+sequenceDiagram
+    participant TranscodingWorker as Transcoding Worker
+    participant IFileStorageService as IFileStorageService
+    participant FileStorageService as .NET FileStorageService (Local/Blob)
+    participant FFmpeg as FFmpeg (External Tool)
+    participant IThumbnailRepository as IThumbnailRepository
+    participant ThumbnailRepository as .NET ThumbnailRepository
+    participant Database as SQL Server (via Entity Framework)
+    participant User
+    participant Frontend as Angular App
+    participant VideoProcessingController as .NET VideoProcessingController
+    participant IVideoProcessingService as IVideoProcessingService
+    participant VideoProcessingService as .NET VideoProcessingService
+    participant IThumbnailService as IThumbnailService
+    participant ThumbnailService as .NET ThumbnailService
+
+    note over TranscodingWorker,Database: Phase 1: Thumbnail Generation (after video transcoding)
+    TranscodingWorker->>FFmpeg: Generate Keyframe Thumbnails (from transcoded video or original)
+    activate FFmpeg
+    FFmpeg-->>TranscodingWorker: Generated Thumbnails (image data)
+    deactivate FFmpeg
+
+    loop For Each Generated Thumbnail
+        TranscodingWorker->>IFileStorageService: StoreThumbnail(VideoId, ThumbnailData, Index)
+        TranscodingWorker-->>FileStorageService: Implementation of IFileStorageService
+        activate FileStorageService
+        FileStorageService->>FileStorageService: Stores Thumbnail Image (Locally/Blob)
+        FileStorageService-->>TranscodingWorker: Thumbnail Stored Confirmation, returns ThumbnailPath
+        deactivate FileStorageService
+
+        TranscodingWorker->>IThumbnailRepository: AddThumbnailMetadata(VideoId, ThumbnailPath, Index, IsDefault?)
+        TranscodingWorker-->>ThumbnailRepository: Implementation of IThumbnailRepository
+        activate ThumbnailRepository
+        ThumbnailRepository->>Database: Insert Thumbnail Metadata (path, index) (via EF)
+        activate Database
+        Database-->>ThumbnailRepository: Thumbnail Metadata Saved
+        deactivate Database
+        ThumbnailRepository-->>TranscodingWorker: Thumbnail Metadata Confirmation
+        deactivate ThumbnailRepository
+    end
+    TranscodingWorker->>TranscodingWorker: Mark first thumbnail as IsDefault = TRUE for video
+
+    note over User,Database: Phase 2: User Views Video and Selects Thumbnail
+    User->>Frontend: Navigates to Video Details Page (for a specific VideoId)
+    Frontend->>VideoProcessingController: GET /api/videos/{videoId}/details
+    activate VideoProcessingController
+    VideoProcessingController->>IVideoProcessingService: GetVideoDetails(VideoId)
+    VideoProcessingController-->>VideoProcessingService: Implementation of IVideoProcessingService
+    activate VideoProcessingService
+    VideoProcessingService->>IThumbnailService: GetDefaultThumbnail(VideoId)
+    VideoProcessingService-->>ThumbnailService: Implementation of IThumbnailService
+    activate ThumbnailService
+    ThumbnailService->>IThumbnailRepository: GetDefaultThumbnailByVideoId(VideoId)
+    ThumbnailService-->>ThumbnailRepository: Implementation of IThumbnailRepository
+    activate ThumbnailRepository
+    ThumbnailRepository->>Database: Query: Default Thumbnail (IsDefault = TRUE) (via EF)
+    activate Database
+    Database-->>ThumbnailRepository: Default Thumbnail Path
+    deactivate Database
+    ThumbnailRepository-->>ThumbnailService: Default Thumbnail Path
+    deactivate ThumbnailRepository
+    ThumbnailService-->>VideoProcessingService: Default Thumbnail Path
+    deactivate ThumbnailService
+    VideoProcessingController-->>Frontend: 200 OK (Video Details with Default Thumbnail)
+    deactivate VideoProcessingController
+    Frontend->>User: Displays Video Details with Auto-Selected Thumbnail
+
+    User->>Frontend: Clicks "Change Thumbnail" Button
+    Frontend->>VideoProcessingController: GET /api/videos/{videoId}/thumbnails (Get all options)
+    activate VideoProcessingController
+    VideoProcessingController->>IThumbnailService: GetAllThumbnailsForVideo(VideoId)
+    VideoProcessingController-->>ThumbnailService: Implementation of IThumbnailService
+    activate ThumbnailService
+    ThumbnailService->>IThumbnailRepository: GetThumbnailsByVideoId(VideoId)
+    ThumbnailService-->>ThumbnailRepository: Implementation of IThumbnailRepository
+    activate ThumbnailRepository
+    ThumbnailRepository->>Database: Query: All Thumbnails for VideoId (via EF)
+    activate Database
+    Database-->>ThumbnailRepository: List of Thumbnail Metadata (paths, indices)
+    deactivate Database
+    ThumbnailRepository-->>ThumbnailService: List of Thumbnail Metadata
+    deactivate ThumbnailRepository
+    ThumbnailService-->>VideoProcessingController: List of Thumbnail DTOs
+    deactivate ThumbnailService
+    VideoProcessingController-->>Frontend: 200 OK (List of Thumbnail Options)
+    deactivate VideoProcessingController
+    Frontend->>User: Displays Thumbnail Selection Modal (with all options)
+
+    User->>Frontend: Selects New Thumbnail Option, Clicks "Save"
+    Frontend->>VideoProcessingController: PUT /api/videos/{videoId}/thumbnail (SelectedThumbnailId)
+    activate VideoProcessingController
+    VideoProcessingController->>IThumbnailService: SetDefaultThumbnail(VideoId, SelectedThumbnailId)
+    VideoProcessingController-->>ThumbnailService: Implementation of IThumbnailService
+    activate ThumbnailService
+    ThumbnailService->>IThumbnailRepository: UpdateDefaultThumbnail(VideoId, SelectedThumbnailId)
+    ThumbnailService-->>ThumbnailRepository: Implementation of IThumbnailRepository
+    activate ThumbnailRepository
+    ThumbnailRepository->>Database: Update IsDefault flags (Set old default to FALSE, new default to TRUE) (via EF)
+    activate Database
+    Database-->>ThumbnailRepository: Database Updated
+    deactivate Database
+    ThumbnailRepository-->>ThumbnailService: Update Confirmation
+    deactivate ThumbnailRepository
+    ThumbnailService-->>VideoProcessingController: Success
+    deactivate ThumbnailService
+    VideoProcessingController-->>Frontend: 200 OK (Success)
+    deactivate VideoProcessingController
+    Frontend->>User: Updates Video Details Page with New Default Thumbnail

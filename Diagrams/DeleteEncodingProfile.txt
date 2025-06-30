@@ -1,0 +1,49 @@
+sequenceDiagram
+    participant AdminUser as Admin User
+    participant Frontend as Angular Admin Panel
+    participant EncodingProfilesController as .NET EncodingProfilesController
+    participant IEncodingProfileService as IEncodingProfileService
+    participant EncodingProfileService as .NET EncodingProfileService
+    participant IEncodingProfileRepository as IEncodingProfileRepository
+    participant EncodingProfileRepository as .NET EncodingProfileRepository
+    participant Database as SQL Server (via Entity Framework)
+
+    AdminUser->>Frontend: Selects Profile, Clicks "Delete", Confirms
+    Frontend->>Frontend: Attaches JWT Token (containing AdminUser's role)
+    Frontend->>EncodingProfilesController: DELETE /api/admin/encodingprofiles/{id}
+    activate EncodingProfilesController
+    EncodingProfilesController->>EncodingProfilesController: Authorize: Check if User has 'Admin' role (from JWT)
+    alt User is NOT Admin
+        EncodingProfilesController-->>Frontend: 403 Forbidden
+        Frontend->>AdminUser: Display "Access Denied" message
+    else User IS Admin
+        EncodingProfilesController->>IEncodingProfileService: SoftDeleteEncodingProfile(id)
+        EncodingProfilesController-->>EncodingProfileService: Implementation of IEncodingProfileService
+        activate EncodingProfileService
+        EncodingProfileService->>IEncodingProfileRepository: GetById(id)
+        EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+        activate EncodingProfileRepository
+        EncodingProfileRepository->>Database: Query: Find EncodingProfile by ID (via Entity Framework)
+        activate Database
+        Database-->>EncodingProfileRepository: Existing Profile Entity | null
+        deactivate Database
+        EncodingProfileRepository-->>EncodingProfileService: Existing Profile Entity | null
+        alt Profile Not Found
+            EncodingProfileService-->>EncodingProfilesController: Exception/Error (Not Found)
+            EncodingProfilesController-->>Frontend: 404 Not Found
+            Frontend->>AdminUser: Display Error Message
+        else Profile Found
+            EncodingProfileService->>IEncodingProfileRepository: UpdateStatus(id, IsActive = FALSE)
+            EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+            activate EncodingProfileRepository
+            EncodingProfileRepository->>Database: Update EncodingProfile IsActive to FALSE (via Entity Framework)
+            activate Database
+            Database-->>EncodingProfileRepository: Profile Status Updated
+            deactivate Database
+            EncodingProfileRepository-->>EncodingProfileService: Profile Soft-Deleted Confirmation
+            deactivate EncodingProfileService
+            EncodingProfilesController-->>Frontend: 204 No Content (or 200 OK with success message)
+            deactivate EncodingProfilesController
+            Frontend->>AdminUser: Displays success message, removes item from table
+        end
+    end

@@ -1,0 +1,117 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant UploadsController as .NET UploadsController
+    participant IUploadService as IUploadService
+    participant UploadService as .NET UploadService
+    participant IUploadMetadataRepository as IUploadMetadataRepository
+    participant UploadMetadataRepository as .NET UploadMetadataRepository
+    participant Database as SQL Server (via Entity Framework)
+    participant IFileStorageService as IFileStorageService
+    participant FileStorageService as .NET FileStorageService (Local/Blob)
+
+    User->>Frontend: Navigates to "My Uploads" section
+    Frontend->>UploadsController: GET /api/uploads/incomplete (CurrentUserId)
+    activate UploadsController
+    UploadsController->>IUploadService: GetIncompleteUploads(CurrentUserId)
+    UploadsController-->>UploadService: Implementation of IUploadService
+    activate UploadService
+    UploadService->>IUploadMetadataRepository: GetUploadsByStatus(CurrentUserId, "InProgress")
+    UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+    activate UploadMetadataRepository
+    UploadMetadataRepository->>Database: Query: Get incomplete uploads for user (via Entity Framework)
+    activate Database
+    Database-->>UploadMetadataRepository: List of Incomplete Upload Metadata (UploadId, FileMetadata, CompletedChunks, TotalChunks)
+    deactivate Database
+    UploadMetadataRepository-->>UploadService: Incomplete Uploads
+    deactivate UploadMetadataRepository
+    UploadService-->>UploadsController: List of Incomplete Uploads
+    deactivate UploadService
+    UploadsController-->>Frontend: 200 OK (List of Incomplete Uploads)
+    deactivate UploadsController
+    Frontend->>User: Displays list of incomplete uploads with progress
+
+    User->>Frontend: Selects an incomplete upload to resume (clicks "Resume" button)
+    Frontend->>Frontend: Retrieves selected UploadId and its metadata (TotalChunks, CompletedChunks)
+    Frontend->>Frontend: Identifies next chunk to send (e.g., first missing chunk index)
+
+    loop For Each Missing Chunk (starting from identified index)
+        Frontend->>UploadsController: POST /api/uploads/chunk (UploadId, ChunkIndex, TotalChunks, ChunkData)
+        activate UploadsController
+        UploadsController->>IUploadService: ProcessChunk(UploadId, ChunkIndex, TotalChunks, ChunkData)
+        UploadsController-->>UploadService: Implementation of IUploadService
+        activate UploadService
+        UploadService->>IUploadMetadataRepository: GetUploadMetadata(UploadId)
+        UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+        activate UploadMetadataRepository
+        UploadMetadataRepository->>Database: Query: Get Upload Metadata (check if chunk already exists/completed)
+        activate Database
+        Database-->>UploadMetadataRepository: Existing Metadata (with chunk statuses)
+        deactivate Database
+        UploadMetadataRepository-->>UploadService: Metadata
+        deactivate UploadMetadataRepository
+
+        alt Chunk Already Completed
+            UploadService->>UploadService: Skip processing, log as redundant
+            UploadService-->>UploadsController: Chunk Already Processed (Current Progress %)
+        else Chunk Missing/Incomplete
+            UploadService->>IFileStorageService: StoreChunk(UploadId, ChunkIndex, ChunkData)
+            UploadService-->>FileStorageService: Implementation of IFileStorageService
+            activate FileStorageService
+            FileStorageService->>FileStorageService: Store Chunk Data Locally
+            FileStorageService-->>UploadService: Chunk Stored Confirmation
+            deactivate FileStorageService
+
+            UploadService->>IUploadMetadataRepository: UpdateChunkStatus(UploadId, ChunkIndex, "Completed")
+            UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+            activate UploadMetadataRepository
+            UploadMetadataRepository->>Database: Update Chunk Status in Metadata (via Entity Framework)
+            activate Database
+            Database-->>UploadMetadataRepository: Status Updated
+            deactivate Database
+            UploadMetadataRepository-->>UploadService: Metadata Updated
+            deactivate UploadMetadataRepository
+
+            UploadService-->>UploadsController: Chunk Processed Success (Current Progress %)
+        end
+        deactivate UploadService
+        UploadsController-->>Frontend: 200 OK (Current Progress %)
+        deactivate UploadsController
+        Frontend->>Frontend: Updates Progress Bar on UI
+    end
+
+    Frontend->>UploadsController: POST /api/uploads/complete (UploadId)
+    activate UploadsController
+    UploadsController->>IUploadService: FinalizeUpload(UploadId)
+    UploadsController-->>UploadService: Implementation of IUploadService
+    activate UploadService
+    UploadService->>IUploadMetadataRepository: GetUploadMetadata(UploadId)
+    UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+    activate UploadMetadataRepository
+    UploadMetadataRepository->>Database: Query: Get Upload Metadata (check all chunks received)
+    activate Database
+    Database-->>UploadMetadataRepository: Full Metadata
+    deactivate Database
+    UploadMetadataRepository-->>UploadService: Full Metadata
+    deactivate UploadMetadataRepository
+
+    UploadService->>FileStorageService: MergeChunks(UploadId)
+    UploadService-->>FileStorageService: Implementation of IFileStorageService
+    activate FileStorageService
+    FileStorageService->>FileStorageService: Merges chunks into final file
+    FileStorageService-->>UploadService: File Merged Confirmation
+    deactivate FileStorageService
+
+    UploadService->>IUploadMetadataRepository: UpdateUploadStatus(UploadId, "Completed")
+    UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+    activate UploadMetadataRepository
+    UploadMetadataRepository->>Database: Update Upload Status to "Completed" (via Entity Framework)
+    activate Database
+    Database-->>UploadMetadataRepository: Status Updated
+    deactivate Database
+    UploadMetadataRepository-->>UploadService: Metadata Updated
+    deactivate UploadService
+
+    UploadsController-->>Frontend: 200 OK (Success Message, Final Video URL)
+    deactivate UploadsController
+    Frontend->>User: Displays "Upload Complete" message and redirects (or shows video details)

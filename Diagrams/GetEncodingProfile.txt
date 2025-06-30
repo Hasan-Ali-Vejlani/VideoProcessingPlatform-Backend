@@ -1,0 +1,38 @@
+sequenceDiagram
+    participant AdminUser as Admin User
+    participant Frontend as Angular Admin Panel
+    participant EncodingProfilesController as .NET EncodingProfilesController
+    participant IEncodingProfileService as IEncodingProfileService
+    participant EncodingProfileService as .NET EncodingProfileService
+    participant IEncodingProfileRepository as IEncodingProfileRepository
+    participant EncodingProfileRepository as .NET EncodingProfileRepository
+    participant Database as SQL Server (via Entity Framework)
+
+    AdminUser->>Frontend: Navigates to "Encoding Profiles" Admin Panel
+    Frontend->>Frontend: Attaches JWT Token (containing AdminUser's role)
+    Frontend->>EncodingProfilesController: GET /api/admin/encodingprofiles
+    activate EncodingProfilesController
+    EncodingProfilesController->>EncodingProfilesController: Authorize: Check if User has 'Admin' role (from JWT)
+    alt User is NOT Admin
+        EncodingProfilesController-->>Frontend: 403 Forbidden
+        Frontend->>AdminUser: Display "Access Denied" message
+        deactivate EncodingProfilesController
+    else User IS Admin
+        EncodingProfilesController->>IEncodingProfileService: GetAllEncodingProfiles()
+        EncodingProfilesController-->>EncodingProfileService: Implementation of IEncodingProfileService
+        activate EncodingProfileService
+        EncodingProfileService->>IEncodingProfileRepository: GetAll()
+        EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+        activate EncodingProfileRepository
+        EncodingProfileRepository->>Database: Query: SELECT * FROM EncodingProfiles WHERE IsActive = TRUE (via Entity Framework)
+        activate Database
+        Database-->>EncodingProfileRepository: List of EncodingProfile Entities
+        deactivate Database
+        EncodingProfileRepository-->>EncodingProfileService: List of EncodingProfile Entities
+        deactivate EncodingProfileRepository
+        EncodingProfileService-->>EncodingProfilesController: List of EncodingProfile DTOs
+        deactivate EncodingProfileService
+        EncodingProfilesController-->>Frontend: 200 OK (List of Encoding Profiles)
+        deactivate EncodingProfilesController
+        Frontend->>AdminUser: Displays list of Encoding Profiles in a table
+    end

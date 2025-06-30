@@ -1,0 +1,160 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant VideoProcessingController as .NET VideoProcessingController
+    participant IVideoProcessingService as IVideoProcessingService
+    participant VideoProcessingService as .NET VideoProcessingService
+    participant IUploadMetadataRepository as IUploadMetadataRepository
+    participant UploadMetadataRepository as .NET UploadMetadataRepository
+    participant IEncodingProfileRepository as IEncodingProfileRepository
+    participant EncodingProfileRepository as .NET EncodingProfileRepository
+    participant ITranscodingJobRepository as ITranscodingJobRepository
+    participant TranscodingJobRepository as .NET TranscodingJobRepository
+    participant IMessageQueueService as IMessageQueueService
+    participant MessageQueueService as .NET MessageQueueService (Local/Azure/Kafka)
+    participant Database as SQL Server (via Entity Framework)
+    participant TranscodingWorker as Separate Transcoding Worker
+    participant IFileStorageService as IFileStorageService
+    participant FileStorageService as .NET FileStorageService (Local/Blob)
+    participant FFmpeg as FFmpeg (External Tool)
+
+    note over User,Frontend: User Initiates Transcoding Request
+    User->>Frontend: Navigates to "My Videos" / Selects Video
+    Frontend->>VideoProcessingController: GET /api/videos/{videoId}/encoding-profiles (Get Available Profiles)
+    activate VideoProcessingController
+    VideoProcessingController->>IEncodingProfileService: GetAllActiveEncodingProfiles()
+    VideoProcessingController-->>EncodingProfileService: Implementation of IEncodingProfileService
+    activate EncodingProfileService
+    EncodingProfileService->>IEncodingProfileRepository: GetAllActive()
+    EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+    activate EncodingProfileRepository
+    EncodingProfileRepository->>Database: Query: Active Encoding Profiles (via EF)
+    activate Database
+    Database-->>EncodingProfileRepository: List of EncodingProfile Entities
+    deactivate Database
+    EncodingProfileRepository-->>EncodingProfileService: List of EncodingProfile DTOs
+    deactivate EncodingProfileRepository
+    EncodingProfileService-->>VideoProcessingController: List of EncodingProfile DTOs
+    deactivate EncodingProfileService
+    VideoProcessingController-->>Frontend: 200 OK (List of Encoding Profiles)
+    deactivate VideoProcessingController
+    Frontend->>User: Displays Available Encoding Profiles
+    User->>Frontend: Selects one or more Encoding Profiles, Clicks "Start Transcoding"
+
+    note over Frontend,Database: Backend Initiates Transcoding Job
+    Frontend->>VideoProcessingController: POST /api/videos/{videoId}/transcode (SelectedProfileIds)
+    activate VideoProcessingController
+    VideoProcessingController->>IVideoProcessingService: CreateTranscodingJob(VideoId, SelectedProfileIds, CurrentUserId)
+    VideoProcessingController-->>VideoProcessingService: Implementation of IVideoProcessingService
+    activate VideoProcessingService
+    VideoProcessingService->>IUploadMetadataRepository: GetVideoOriginalPath(VideoId)
+    VideoProcessingService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+    activate UploadMetadataRepository
+    UploadMetadataRepository->>Database: Query: Video Path (via EF)
+    activate Database
+    Database-->>UploadMetadataRepository: Original Video File Path
+    deactivate Database
+    UploadMetadataRepository-->>VideoProcessingService: Original Video File Path
+    deactivate UploadMetadataRepository
+
+    VideoProcessingService->>IEncodingProfileRepository: GetProfilesByIds(SelectedProfileIds)
+    VideoProcessingService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+    activate EncodingProfileRepository
+    EncodingProfileRepository->>Database: Query: Encoding Profile Details (via EF)
+    activate Database
+    Database-->>EncodingProfileRepository: List of EncodingProfile Entities
+    deactivate Database
+    EncodingProfileRepository-->>VideoProcessingService: List of EncodingProfile Entities
+    deactivate EncodingProfileRepository
+
+    VideoProcessingService->>VideoProcessingService: Create TranscodingJobEntity (Status: "Queued")
+    VideoProcessingService->>ITranscodingJobRepository: AddTranscodingJob(TranscodingJobEntity)
+    VideoProcessingService-->>TranscodingJobRepository: Implementation of ITranscodingJobRepository
+    activate TranscodingJobRepository
+    TranscodingJobRepository->>Database: Insert New Transcoding Job (via EF)
+    activate Database
+    Database-->>TranscodingJobRepository: Transcoding Job Saved, returns JobId
+    deactivate Database
+    TranscodingJobRepository-->>VideoProcessingService: TranscodingJobEntity with JobId
+    deactivate TranscodingJobRepository
+
+    VideoProcessingService->>IMessageQueueService: PublishTranscodingJob(JobId, OriginalFilePath, EncodingProfiles, ...)
+    VideoProcessingService-->>MessageQueueService: Implementation of IMessageQueueService (e.g., LocalQueueService)
+    activate MessageQueueService
+    MessageQueueService-->>VideoProcessingService: Message Published Confirmation
+    deactivate MessageQueueService
+    VideoProcessingService-->>VideoProcessingController: Success (JobId, Status: "Queued")
+    deactivate VideoProcessingService
+    VideoProcessingController-->>Frontend: 200 OK (JobId, Status: "Queued")
+    deactivate VideoProcessingController
+    Frontend->>User: Displays "Transcoding Initiated" message / Updates Video Status
+
+    note over TranscodingWorker,FileStorageService: Transcoding Worker Processes Job
+    TranscodingWorker->>IMessageQueueService: Listen for TranscodingJob Messages
+    activate MessageQueueService
+    MessageQueueService-->>TranscodingWorker: Delivers TranscodingJob Message (JobId, OriginalPath, Profiles...)
+    deactivate MessageQueueService
+
+    activate TranscodingWorker
+    TranscodingWorker->>ITranscodingJobRepository: UpdateJobStatus(JobId, "Processing")
+    TranscodingWorker-->>TranscodingJobRepository: Implementation of ITranscodingJobRepository
+    activate TranscodingJobRepository
+    TranscodingJobRepository->>Database: Update Job Status (via EF)
+    activate Database
+    Database-->>TranscodingJobRepository: Status Updated
+    deactivate Database
+    TranscodingJobRepository-->>TranscodingWorker: Status Updated Confirmation
+    deactivate TranscodingJobRepository
+
+    TranscodingWorker->>IFileStorageService: RetrieveFile(OriginalPath)
+    TranscodingWorker-->>FileStorageService: Implementation of IFileStorageService (e.g., LocalStorageService)
+    activate FileStorageService
+    FileStorageService->>FileStorageService: Retrieves Original Video File
+    FileStorageService-->>TranscodingWorker: Original Video Data
+    deactivate FileStorageService
+
+    TranscodingWorker->>FFmpeg: Execute Transcode Command(s) (CMAF, HLS, MPEG-Dash, CENC, Watermark)
+    activate FFmpeg
+    FFmpeg-->>TranscodingWorker: Transcoded Video Renditions (output streams/files)
+    deactivate FFmpeg
+
+    TranscodingWorker->>IFileStorageService: StoreRenditions(JobId, RenditionData, TargetPaths)
+    TranscodingWorker-->>FileStorageService: Implementation of IFileStorageService (e.g., LocalStorageService)
+    activate FileStorageService
+    FileStorageService->>FileStorageService: Stores Transcoded Renditions (Locally/Blob)
+    FileStorageService-->>TranscodingWorker: Renditions Stored Confirmation
+    deactivate FileStorageService
+
+    TranscodingWorker->>ITranscodingJobRepository: UpdateJobStatusAndOutputPaths(JobId, "Completed", RenditionOutputPaths)
+    TranscodingWorker-->>TranscodingJobRepository: Implementation of ITranscodingJobRepository
+    activate TranscodingJobRepository
+    TranscodingJobRepository->>Database: Update Job Status & Output Paths (via EF)
+    activate Database
+    Database-->>TranscodingJobRepository: Job Updated
+    deactivate Database
+    TranscodingJobRepository-->>TranscodingWorker: Job Updated Confirmation
+    deactivate TranscodingJobRepository
+    deactivate TranscodingWorker
+
+    note over Frontend,Database: Frontend Periodically Checks Status
+    loop Periodically
+        Frontend->>VideoProcessingController: GET /api/videos/transcoding-status/{JobId}
+        activate VideoProcessingController
+        VideoProcessingController->>IVideoProcessingService: GetTranscodingJobStatus(JobId)
+        VideoProcessingController-->>VideoProcessingService: Implementation of IVideoProcessingService
+        activate VideoProcessingService
+        VideoProcessingService->>ITranscodingJobRepository: GetJobStatus(JobId)
+        VideoProcessingService-->>TranscodingJobRepository: Implementation of ITranscodingJobRepository
+        activate TranscodingJobRepository
+        TranscodingJobRepository->>Database: Query: Job Status (via EF)
+        activate Database
+        Database-->>TranscodingJobRepository: Job Status and Output Paths
+        deactivate Database
+        TranscodingJobRepository-->>VideoProcessingService: Job Status and Output Paths
+        deactivate TranscodingJobRepository
+        VideoProcessingService-->>VideoProcessingController: Job Status and Output Paths
+        deactivate VideoProcessingService
+        VideoProcessingController-->>Frontend: 200 OK (Job Status, Progress, Rendition URLs if Completed)
+        deactivate VideoProcessingController
+        Frontend->>User: Updates UI (Progress Bar, "Completed" status, Playback links)
+    end

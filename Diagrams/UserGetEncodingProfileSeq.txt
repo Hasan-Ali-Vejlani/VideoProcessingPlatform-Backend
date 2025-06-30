@@ -1,0 +1,37 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant VideoProcessingController as .NET VideoProcessingController
+    participant IEncodingProfileService as IEncodingProfileService
+    participant EncodingProfileService as .NET EncodingProfileService
+    participant IEncodingProfileRepository as IEncodingProfileRepository
+    participant EncodingProfileRepository as .NET EncodingProfileRepository
+    participant Database as SQL Server (via Entity Framework)
+
+    User->>Frontend: Navigates to Video Upload/Details Page (to select profile for transcode)
+    Frontend->>Frontend: Attaches JWT Token (containing User's authentication status)
+    Frontend->>VideoProcessingController: GET /api/videos/encoding-profiles
+    activate VideoProcessingController
+    VideoProcessingController->>VideoProcessingController: Authorize: Check if User is Authenticated (any role)
+    alt User is NOT Authenticated
+        VideoProcessingController-->>Frontend: 401 Unauthorized
+        Frontend->>User: Redirect to Login or Display "Please Login" message
+    else User IS Authenticated
+        VideoProcessingController->>IEncodingProfileService: GetAllEncodingProfiles()
+        VideoProcessingController-->>EncodingProfileService: Implementation of IEncodingProfileService
+        activate EncodingProfileService
+        EncodingProfileService->>IEncodingProfileRepository: GetAllActive()
+        EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+        activate EncodingProfileRepository
+        EncodingProfileRepository->>Database: Query: SELECT * FROM EncodingProfiles WHERE IsActive = TRUE (via Entity Framework)
+        activate Database
+        Database-->>EncodingProfileRepository: List of EncodingProfile Entities
+        deactivate Database
+        EncodingProfileRepository-->>EncodingProfileService: List of EncodingProfile DTOs
+        deactivate EncodingProfileRepository
+        EncodingProfileService-->>VideoProcessingController: List of EncodingProfile DTOs
+        deactivate EncodingProfileService
+        VideoProcessingController-->>Frontend: 200 OK (List of Encoding Profiles)
+        deactivate VideoProcessingController
+        Frontend->>User: Displays list of Encoding Profiles for selection
+    end

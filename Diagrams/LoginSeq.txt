@@ -1,0 +1,52 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant AuthController as .NET AuthController
+    participant IAuthService as IAuthService
+    participant AuthService as .NET AuthService
+    participant IUserRepository as IUserRepository
+    participant UserRepository as .NET UserRepository
+    participant Database as SQL Server (via Entity Framework)
+    participant IJWTService as IJWTService
+    participant JWTService as JWT Service
+
+    User->>Frontend: Navigates to Login Page
+    User->>Frontend: Enters Username, Password
+    Frontend->>AuthController: POST /api/auth/login (Username, Password)
+    activate AuthController
+    AuthController->>IAuthService: LoginUser(Username, Password)
+    AuthController-->>AuthService: Implementation of IAuthService
+    activate AuthService
+    AuthService->>IUserRepository: GetUserByUsername(Username)
+    AuthService-->>UserRepository: Implementation of IUserRepository
+    activate UserRepository
+    UserRepository->>Database: Query: Find User by Username (via Entity Framework)
+    activate Database
+    Database-->>UserRepository: User Data (Hashed Password, Role, ID) | null
+    deactivate Database
+    UserRepository-->>AuthService: User Entity | null
+    deactivate UserRepository
+    alt User Not Found
+        AuthService-->>AuthController: Exception/Error (Invalid Credentials)
+        AuthController-->>Frontend: 401 Unauthorized (Invalid Credentials)
+        Frontend->>User: Display Error Message
+    else User Found
+        AuthService->>AuthService: Verify Password (Compare input password hash with stored hash)
+        alt Password Mismatch
+            AuthService-->>AuthController: Exception/Error (Invalid Credentials)
+            AuthController-->>Frontend: 401 Unauthorized (Invalid Credentials)
+            Frontend->>User: Display Error Message
+        else Password Match
+            AuthService->>IJWTService: GenerateToken(User ID, Role, Expiry)
+            AuthService-->>JWTService: Implementation of IJWTService
+            activate JWTService
+            JWTService-->>AuthService: JWT Token
+            deactivate JWTService
+            AuthService-->>AuthController: JWT Token
+            deactivate AuthService
+            AuthController-->>Frontend: 200 OK (JWT Token)
+            deactivate AuthController
+            Frontend->>Frontend: Store JWT Token (e.g., Local Storage)
+            Frontend->>User: Redirect to Dashboard/Home Page
+        end
+    end

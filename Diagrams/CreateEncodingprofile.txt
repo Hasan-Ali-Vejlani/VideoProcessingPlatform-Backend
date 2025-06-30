@@ -1,0 +1,47 @@
+sequenceDiagram
+    participant AdminUser as Admin User
+    participant Frontend as Angular Admin Panel
+    participant EncodingProfilesController as .NET EncodingProfilesController
+    participant IEncodingProfileService as IEncodingProfileService
+    participant EncodingProfileService as .NET EncodingProfileService
+    participant IFFmpegCommandBuilder as IFFmpegCommandBuilder
+    participant FFmpegCommandBuilder as .NET FFmpegCommandBuilder
+    participant IEncodingProfileRepository as IEncodingProfileRepository
+    participant EncodingProfileRepository as .NET EncodingProfileRepository
+    participant Database as SQL Server (via Entity Framework)
+
+    AdminUser->>Frontend: Clicks "Add New Profile", Fills Form (Name, Resolution, DRM, Watermark etc.)
+    Frontend->>Frontend: Attaches JWT Token (containing AdminUser's role)
+    Frontend->>EncodingProfilesController: POST /api/admin/encodingprofiles (NewProfileData)
+    activate EncodingProfilesController
+    EncodingProfilesController->>EncodingProfilesController: Authorize: Check if User has 'Admin' role (from JWT)
+    alt User is NOT Admin
+        EncodingProfilesController-->>Frontend: 403 Forbidden
+        Frontend->>AdminUser: Display "Access Denied" message
+    else User IS Admin
+        EncodingProfilesController->>IEncodingProfileService: CreateEncodingProfile(NewProfileData)
+        EncodingProfilesController-->>EncodingProfileService: Implementation of IEncodingProfileService
+        activate EncodingProfileService
+        EncodingProfileService->>EncodingProfileService: Validate Profile Data (based on NewProfileData)
+
+        EncodingProfileService->>IFFmpegCommandBuilder: BuildCommand(NewProfileData, inputPathPlaceholder, outputPathPlaceholder)
+        EncodingProfileService-->>FFmpegCommandBuilder: Implementation of IFFmpegCommandBuilder
+        activate FFmpegCommandBuilder
+        FFmpegCommandBuilder-->>EncodingProfileService: Generated FFmpegArgsTemplate String
+        deactivate FFmpegCommandBuilder
+
+        EncodingProfileService->>IEncodingProfileRepository: Add(NewProfileEntity with GeneratedArgs)
+        EncodingProfileService-->>EncodingProfileRepository: Implementation of IEncodingProfileRepository
+        activate EncodingProfileRepository
+        EncodingProfileRepository->>Database: Insert New EncodingProfile (via Entity Framework)
+        activate Database
+        Database-->>EncodingProfileRepository: New Profile Saved
+        deactivate Database
+        EncodingProfileRepository-->>EncodingProfileService: Saved Profile Entity
+        deactivate EncodingProfileRepository
+        EncodingProfileService-->>EncodingProfilesController: Created Profile DTO
+        deactivate EncodingProfileService
+        EncodingProfilesController-->>Frontend: 201 Created (Created Profile DTO)
+        deactivate EncodingProfilesController
+        Frontend->>AdminUser: Displays success message, updates table
+    end

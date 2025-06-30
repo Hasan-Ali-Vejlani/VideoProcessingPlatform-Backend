@@ -1,0 +1,76 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant PlaybackController as .NET PlaybackController
+    participant IVideoPlaybackService as IVideoPlaybackService
+    participant VideoPlaybackService as .NET VideoPlaybackService
+    participant ITranscodingJobRepository as ITranscodingJobRepository
+    participant TranscodingJobRepository as .NET TranscodingJobRepository
+    participant Database as SQL Server (via Entity Framework)
+    participant ICDNService as ICDNService
+    participant CDNService as .NET CDNService (Azure/CloudFront Impl.)
+    participant CDN as Azure CDN / CloudFront
+    participant IFileStorageService as IFileStorageService
+    participant FileStorageService as .NET FileStorageService (Local/Blob)
+    participant TranscodingWorker as Transcoding Worker
+
+    note over User,Database: Phase 1: Requesting a Signed Video URL for Playback
+    User->>Frontend: Navigates to Video Playback Page (for a specific VideoId)
+    Frontend->>PlaybackController: GET /api/playback/video/{videoId}/url (RequestedRenditionType)
+    activate PlaybackController
+    PlaybackController->>IVideoPlaybackService: GetSignedVideoUrl(VideoId, RequestedRenditionType, CurrentUserId)
+    PlaybackController-->>VideoPlaybackService: Implementation of IVideoPlaybackService
+    activate VideoPlaybackService
+    VideoPlaybackService->>ITranscodingJobRepository: GetCompletedRenditionPaths(VideoId)
+    VideoPlaybackService-->>TranscodingJobRepository: Implementation of ITranscodingJobRepository
+    activate TranscodingJobRepository
+    TranscodingJobRepository->>Database: Query: Transcoded Rendition Paths for Video (via EF)
+    activate Database
+    Database-->>TranscodingJobRepository: Rendition Output Paths (e.g., Blob URIs/Keys)
+    deactivate Database
+    TranscodingJobRepository-->>VideoPlaybackService: Rendition Output Paths
+    deactivate TranscodingJobRepository
+
+    VideoPlaybackService->>ICDNService: GenerateSignedUrl(RenditionBlobUri/Key, ExpirationTime)
+    VideoPlaybackService-->>CDNService: Implementation of ICDNService (e.g., AzureCdnService)
+    activate CDNService
+    CDNService->>CDN: Request Signed URL (using CDN SDK/API)
+    activate CDN
+    CDN-->>CDNService: Signed URL (time-limited)
+    deactivate CDN
+    CDNService-->>VideoPlaybackService: Signed CDN URL
+    deactivate CDNService
+    VideoPlaybackService-->>PlaybackController: Signed CDN URL
+    deactivate VideoPlaybackService
+    PlaybackController-->>Frontend: 200 OK (Signed CDN URL)
+    deactivate PlaybackController
+    Frontend->>Frontend: Embeds video player with Signed CDN URL
+    Frontend->>User: Displays Video Player (ready for playback)
+
+    note over User,CDN: Phase 2: Video Playback via CDN
+    Frontend->>CDN: GET Signed CDN URL
+    activate CDN
+    CDN->>CDN: Validate Signed URL Signature and Expiration
+    alt Signature Invalid / Expired
+        CDN-->>Frontend: 403 Forbidden
+        Frontend->>User: Display "Access Denied" or "Link Expired" Error
+    else Signature Valid
+        CDN->>FileStorageService: Fetch Video Content (if not cached)
+        activate FileStorageService
+        FileStorageService-->>CDN: Video Data
+        deactivate FileStorageService
+        CDN-->>Frontend: Stream Video Content
+        deactivate CDN
+        Frontend->>User: Video Plays
+    end
+
+    note over TranscodingWorker,CDN: Phase 3: Cache Invalidation (After Content Modification/Update)
+    TranscodingWorker->>ICDNService: InvalidateCache(VideoRenditionPaths)
+    TranscodingWorker-->>CDNService: Implementation of ICDNService
+    activate CDNService
+    CDNService->>CDN: Send Invalidation Request (using CDN SDK/API)
+    activate CDN
+    CDN-->>CDNService: Invalidation Acknowledged
+    deactivate CDN
+    CDNService-->>TranscodingWorker: Invalidation Success
+    deactivate CDNService

@@ -1,0 +1,56 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant AuthController as .NET AuthController
+    participant IAuthService as IAuthService
+    participant AuthService as .NET AuthService
+    participant IUserRepository as IUserRepository
+    participant UserRepository as .NET UserRepository
+    participant Database as SQL Server (via Entity Framework)
+    participant IJWTService as IJWTService
+    participant JWTService as JWT Service
+
+    User->>Frontend: Navigates to Registration Page
+    User->>Frontend: Enters Email, Username, Password
+    Frontend->>AuthController: POST /api/auth/register (Email, Username, Password)
+    activate AuthController
+    AuthController->>IAuthService: RegisterUser(Email, Username, Password)
+    AuthController-->>AuthService: Implementation of IAuthService
+    activate AuthService
+    AuthService->>AuthService: Validate Input
+    AuthService->>AuthService: Hash Password
+    AuthService->>IUserRepository: GetUserByUsernameOrEmail(Username, Email)
+    AuthService-->>UserRepository: Implementation of IUserRepository
+    activate UserRepository
+    UserRepository->>Database: Query: Check if User exists (via Entity Framework)
+    activate Database
+    Database-->>UserRepository: Result (User Exists/Not)
+    deactivate Database
+    UserRepository-->>AuthService: Existing User Data | null
+    deactivate UserRepository
+    alt User Already Exists
+        AuthService-->>AuthController: Exception/Error (User Exists)
+        AuthController-->>Frontend: 409 Conflict (User Already Exists)
+        Frontend->>User: Display Error Message
+    else New User
+        AuthService->>IUserRepository: AddUser(NewUserEntity)
+        AuthService-->>UserRepository: Implementation of IUserRepository
+        activate UserRepository
+        UserRepository->>Database: Save New User (Hashed Password, Email, Username, Role: 'User') (via Entity Framework)
+        activate Database
+        Database-->>UserRepository: User Saved Confirmation
+        deactivate Database
+        UserRepository-->>AuthService: Saved User Entity
+        deactivate UserRepository
+        AuthService->>IJWTService: GenerateToken(User ID, Role, Expiry)
+        AuthService-->>JWTService: Implementation of IJWTService
+        activate JWTService
+        JWTService-->>AuthService: JWT Token
+        deactivate JWTService
+        AuthService-->>AuthController: Success Message, JWT Token
+        deactivate AuthService
+        AuthController-->>Frontend: 201 Created (Success Message, JWT Token)
+        deactivate AuthController
+        Frontend->>Frontend: Store JWT Token (e.g., Local Storage)
+        Frontend->>User: Display Success Message, Auto-login (redirect)
+    end

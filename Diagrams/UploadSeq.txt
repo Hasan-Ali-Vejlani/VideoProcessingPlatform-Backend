@@ -1,0 +1,109 @@
+sequenceDiagram
+    participant User
+    participant Frontend as Angular App
+    participant UploadsController as .NET UploadsController
+    participant IUploadService as IUploadService
+    participant UploadService as .NET UploadService
+    participant IUploadMetadataRepository as IUploadMetadataRepository
+    participant UploadMetadataRepository as .NET UploadMetadataRepository
+    participant Database as SQL Server (via Entity Framework)
+    participant IFileStorageService as IFileStorageService
+    participant FileStorageService as .NET FileStorageService (Local/Blob)
+
+    User->>Frontend: Clicks "Upload New Video"
+    Frontend->>User: Opens File Selection Modal
+    User->>Frontend: Selects Video File (e.g., video.mp4)
+    Frontend->>Frontend: Initializes Upload Process
+    Frontend->>Frontend: Generates unique UploadId (e.g., UUID)
+    Frontend->>Frontend: Divides file into chunks
+
+    loop For Each Chunk
+        Frontend->>UploadsController: POST /api/uploads/chunk (UploadId, ChunkIndex, TotalChunks, ChunkData, FileMetadata)
+        activate UploadsController
+        UploadsController->>IUploadService: ProcessChunk(UploadId, ChunkIndex, TotalChunks, ChunkData, FileMetadata)
+        UploadsController-->>UploadService: Implementation of IUploadService
+        activate UploadService
+        UploadService->>IUploadMetadataRepository: GetUploadMetadata(UploadId)
+        UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+        activate UploadMetadataRepository
+        UploadMetadataRepository->>Database: Query: Get Upload Metadata (via Entity Framework)
+        activate Database
+        Database-->>UploadMetadataRepository: Existing Metadata | null
+        deactivate Database
+        UploadMetadataRepository-->>UploadService: Metadata | null
+        deactivate UploadMetadataRepository
+
+        alt New Upload / First Chunk
+            UploadService->>UploadService: Validate FileMetadata
+            UploadService->>IUploadMetadataRepository: CreateUploadMetadata(UploadId, FileMetadata, TotalChunks, CurrentUserId, "InProgress")
+            UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+            activate UploadMetadataRepository
+            UploadMetadataRepository->>Database: Save New Upload Metadata (via Entity Framework)
+            activate Database
+            Database-->>UploadMetadataRepository: Metadata Saved
+            deactivate Database
+            UploadMetadataRepository-->>UploadService: Saved Metadata
+            deactivate UploadMetadataRepository
+        end
+
+        UploadService->>IFileStorageService: StoreChunk(UploadId, ChunkIndex, ChunkData)
+        UploadService-->>FileStorageService: Implementation of IFileStorageService (e.g., LocalStorageService)
+        activate FileStorageService
+        FileStorageService->>FileStorageService: Store Chunk Data Locally
+        FileStorageService-->>UploadService: Chunk Stored Confirmation
+        deactivate FileStorageService
+
+        UploadService->>IUploadMetadataRepository: UpdateChunkStatus(UploadId, ChunkIndex, "Completed")
+        UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+        activate UploadMetadataRepository
+        UploadMetadataRepository->>Database: Update Chunk Status in Metadata (via Entity Framework)
+        activate Database
+        Database-->>UploadMetadataRepository: Status Updated
+        deactivate Database
+        UploadMetadataRepository-->>UploadService: Metadata Updated
+        deactivate UploadMetadataRepository
+
+        UploadService-->>UploadsController: Chunk Processed Success (Current Progress %)
+        deactivate UploadService
+        UploadsController-->>Frontend: 200 OK (Current Progress %)
+        deactivate UploadsController
+        Frontend->>Frontend: Updates Progress Bar on UI
+    end
+
+    Frontend->>UploadsController: POST /api/uploads/complete (UploadId)
+    activate UploadsController
+    UploadsController->>IUploadService: FinalizeUpload(UploadId)
+    UploadsController-->>UploadService: Implementation of IUploadService
+    activate UploadService
+    UploadService->>IUploadMetadataRepository: GetUploadMetadata(UploadId)
+    UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+    activate UploadMetadataRepository
+    UploadMetadataRepository->>Database: Query: Get Upload Metadata (check all chunks received)
+    activate Database
+    Database-->>UploadMetadataRepository: Full Metadata
+    deactivate Database
+    UploadMetadataRepository-->>UploadService: Full Metadata
+    deactivate UploadMetadataRepository
+
+    UploadService->>FileStorageService: MergeChunks(UploadId)
+    UploadService-->>FileStorageService: Implementation of IFileStorageService
+    activate FileStorageService
+    FileStorageService->>FileStorageService: Merges chunks into final file
+    FileStorageService-->>UploadService: File Merged Confirmation
+    deactivate FileStorageService
+
+    UploadService->>IUploadMetadataRepository: UpdateUploadStatus(UploadId, "Completed")
+    UploadService-->>UploadMetadataRepository: Implementation of IUploadMetadataRepository
+    activate UploadMetadataRepository
+    UploadMetadataRepository->>Database: Update Upload Status to "Completed" (via Entity Framework)
+    activate Database
+    Database-->>UploadMetadataRepository: Status Updated
+    deactivate Database
+    UploadMetadataRepository-->>UploadService: Metadata Updated
+    deactivate UploadMetadataRepository
+
+    UploadService-->>UploadsController: Upload Finalized Success
+    deactivate UploadService
+    UploadsController-->>Frontend: 200 OK (Success Message, Final Video URL)
+    deactivate UploadsController
+    Frontend->>User: Displays "Upload Complete" message and redirects (or shows video details)
